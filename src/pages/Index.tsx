@@ -4,7 +4,8 @@ import { PhotoUploader } from '@/components/PhotoUploader';
 import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { PhotoFile } from '@/types/photo';
-import { extractExif, generateAiExif } from '@/lib/exif';
+import { extractExif, generateAiExif, generateRawExif, fileToDataUrl } from '@/lib/exif';
+import { embedExifIntoJpeg } from '@/lib/exifWriter';
 import { toast } from 'sonner';
 
 function generateId(): string {
@@ -36,7 +37,9 @@ const Index = () => {
         id,
         file,
         preview,
+        originalDataUrl: '',
         originalExif: {},
+        rawExif: {},
         enhancedExif: {},
         status: 'extracting',
       };
@@ -44,14 +47,25 @@ const Index = () => {
       setPhotos(prev => [...prev, newPhoto]);
       toast.success(`${file.name} uploaded`);
 
-      // Extract EXIF
+      // Extract EXIF and get data URL
       try {
-        const exif = await extractExif(file);
-        const enhanced = generateAiExif(exif);
+        const [exifResult, dataUrl] = await Promise.all([
+          extractExif(file),
+          fileToDataUrl(file)
+        ]);
+        
+        const enhanced = generateAiExif(exifResult.display);
         
         setPhotos(prev => prev.map(p => 
           p.id === id 
-            ? { ...p, originalExif: exif, enhancedExif: enhanced, status: 'uploaded' }
+            ? { 
+                ...p, 
+                originalExif: exifResult.display, 
+                rawExif: exifResult.raw,
+                enhancedExif: enhanced, 
+                originalDataUrl: dataUrl,
+                status: 'uploaded' 
+              }
             : p
         ));
         toast.success(`EXIF extracted from ${file.name}`);
@@ -75,9 +89,8 @@ const Index = () => {
       p.id === id ? { ...p, status: 'enhancing' } : p
     ));
 
-    toast.info('Enhancing image... This may take a moment');
+    toast.info('Enhancing image with EXIF data... This may take a moment');
 
-    // Simulate image enhancement with canvas operations
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -89,22 +102,18 @@ const Index = () => {
           canvas.height = img.height;
           
           if (ctx) {
-            // Draw original image
             ctx.drawImage(img, 0, 0);
             
-            // Get image data
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             
             // Enhance colors - increase saturation and contrast
             for (let i = 0; i < data.length; i += 4) {
-              // Increase contrast
               const factor = 1.15;
-              data[i] = Math.min(255, Math.max(0, factor * (data[i] - 128) + 128));     // R
-              data[i + 1] = Math.min(255, Math.max(0, factor * (data[i + 1] - 128) + 128)); // G
-              data[i + 2] = Math.min(255, Math.max(0, factor * (data[i + 2] - 128) + 128)); // B
+              data[i] = Math.min(255, Math.max(0, factor * (data[i] - 128) + 128));
+              data[i + 1] = Math.min(255, Math.max(0, factor * (data[i + 1] - 128) + 128));
+              data[i + 2] = Math.min(255, Math.max(0, factor * (data[i + 2] - 128) + 128));
               
-              // Slight saturation boost
               const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
               const satBoost = 1.2;
               data[i] = Math.min(255, Math.max(0, avg + satBoost * (data[i] - avg)));
@@ -120,18 +129,22 @@ const Index = () => {
         img.src = photo.preview;
       });
 
-      // Simulate processing time
-      await new Promise(r => setTimeout(r, 1500));
-
-      const enhancedPreview = canvas.toDataURL(photo.file.type);
+      // Get enhanced image as JPEG data URL (JPEG supports EXIF)
+      let enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      
+      // Generate complete EXIF data (fill in missing camera data)
+      const completeRawExif = generateRawExif(photo.rawExif, canvas.width, canvas.height);
+      
+      // Embed EXIF data into the enhanced image
+      enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
       
       setPhotos(prev => prev.map(p => 
         p.id === id 
-          ? { ...p, enhancedPreview, status: 'ready' }
+          ? { ...p, enhancedPreview: enhancedDataUrl, status: 'ready' }
           : p
       ));
       
-      toast.success('Image enhanced successfully!');
+      toast.success('Image enhanced with full EXIF data!');
     } catch (error) {
       console.error('Enhancement error:', error);
       setPhotos(prev => prev.map(p => 
@@ -159,10 +172,8 @@ const Index = () => {
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        {/* Steps Indicator */}
         <StepsIndicator currentStep={currentStep} />
 
-        {/* Upload Area */}
         <div className="max-w-2xl mx-auto mb-8">
           <PhotoUploader 
             onUpload={handleUpload}
@@ -171,7 +182,6 @@ const Index = () => {
           />
         </div>
 
-        {/* Photos Grid */}
         {photos.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {photos.map(photo => (
@@ -186,7 +196,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Empty State */}
         {photos.length === 0 && (
           <div className="text-center py-12">
             <p className="text-muted-foreground">

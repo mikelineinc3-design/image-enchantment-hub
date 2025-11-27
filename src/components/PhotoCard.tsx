@@ -4,6 +4,7 @@ import { ExifPanel } from './ExifPanel';
 import { Button } from '@/components/ui/button';
 import { Download, Sparkles, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface PhotoCardProps {
   photo: PhotoFile;
@@ -18,12 +19,34 @@ export function PhotoCard({ photo, onEnhance, onRemove, isEnhancing }: PhotoCard
   const displayImage = showEnhanced && photo.enhancedPreview ? photo.enhancedPreview : photo.preview;
 
   const handleDownload = () => {
+    if (!photo.enhancedPreview) {
+      toast.error('Please enhance the photo first');
+      return;
+    }
+    
+    // Create blob from data URL for proper download
+    const byteString = atob(photo.enhancedPreview.split(',')[1]);
+    const mimeString = photo.enhancedPreview.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([ab], { type: mimeString });
+    
     const link = document.createElement('a');
-    link.href = displayImage;
-    link.download = `enhanced_${photo.file.name}`;
+    link.href = URL.createObjectURL(blob);
+    
+    // Keep original name but ensure .jpg extension
+    const baseName = photo.file.name.replace(/\.[^/.]+$/, '');
+    link.download = `${baseName}_enhanced.jpg`;
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    
+    toast.success('Photo downloaded with embedded EXIF data!');
   };
 
   const statusIcon = {
