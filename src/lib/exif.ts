@@ -1,52 +1,90 @@
 import ExifReader from 'exifreader';
-import { ExifData } from '@/types/photo';
+import { ExifData, RawExifData } from '@/types/photo';
 
-export async function extractExif(file: File): Promise<ExifData> {
+export async function extractExif(file: File): Promise<{ display: ExifData; raw: RawExifData }> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer, { expanded: true });
     
-    const exif: ExifData = {};
+    const display: ExifData = {};
+    const raw: RawExifData = {};
     
     // Basic image info
     if (tags.exif) {
-      exif.make = tags.exif.Make?.description;
-      exif.model = tags.exif.Model?.description;
-      exif.dateTime = tags.exif.DateTimeOriginal?.description || tags.exif.DateTime?.description;
-      exif.exposureTime = tags.exif.ExposureTime?.description;
-      exif.fNumber = tags.exif.FNumber?.description;
-      exif.iso = tags.exif.ISOSpeedRatings?.value as number;
-      exif.focalLength = tags.exif.FocalLength?.description;
-      exif.software = tags.exif.Software?.description;
-      exif.orientation = tags.exif.Orientation?.value as number;
-      exif.colorSpace = tags.exif.ColorSpace?.description;
-      exif.flash = tags.exif.Flash?.description;
-      exif.whiteBalance = tags.exif.WhiteBalance?.description;
+      display.make = tags.exif.Make?.description;
+      display.model = tags.exif.Model?.description;
+      display.dateTime = tags.exif.DateTimeOriginal?.description || tags.exif.DateTime?.description;
+      display.exposureTime = tags.exif.ExposureTime?.description;
+      display.fNumber = tags.exif.FNumber?.description;
+      display.iso = tags.exif.ISOSpeedRatings?.value as number;
+      display.focalLength = tags.exif.FocalLength?.description;
+      display.software = tags.exif.Software?.description;
+      display.orientation = tags.exif.Orientation?.value as number;
+      display.colorSpace = tags.exif.ColorSpace?.description;
+      display.flash = tags.exif.Flash?.description;
+      display.whiteBalance = tags.exif.WhiteBalance?.description;
+
+      // Raw numeric values for embedding
+      raw.make = tags.exif.Make?.description;
+      raw.model = tags.exif.Model?.description;
+      raw.dateTime = tags.exif.DateTimeOriginal?.description || tags.exif.DateTime?.description;
+      raw.iso = tags.exif.ISOSpeedRatings?.value as number;
+      raw.orientation = tags.exif.Orientation?.value as number;
+      raw.software = tags.exif.Software?.description;
+      
+      // Parse exposure time (e.g., "1/125" -> 0.008)
+      if (tags.exif.ExposureTime?.value) {
+        const expVal = tags.exif.ExposureTime.value;
+        if (Array.isArray(expVal) && expVal.length === 2) {
+          raw.exposureTime = expVal[0] / expVal[1];
+        }
+      }
+      
+      // Parse f-number
+      if (tags.exif.FNumber?.value) {
+        const fVal = tags.exif.FNumber.value;
+        if (Array.isArray(fVal) && fVal.length === 2) {
+          raw.fNumber = fVal[0] / fVal[1];
+        }
+      }
+      
+      // Parse focal length
+      if (tags.exif.FocalLength?.value) {
+        const flVal = tags.exif.FocalLength.value;
+        if (Array.isArray(flVal) && flVal.length === 2) {
+          raw.focalLength = flVal[0] / flVal[1];
+        }
+      }
+      
+      raw.colorSpace = tags.exif.ColorSpace?.value as number;
+      raw.flash = tags.exif.Flash?.value as number;
+      raw.whiteBalance = tags.exif.WhiteBalance?.value as number;
     }
     
     // Image dimensions
     if (tags.file) {
-      exif.width = tags.file['Image Width']?.value as number;
-      exif.height = tags.file['Image Height']?.value as number;
+      display.width = tags.file['Image Width']?.value as number;
+      display.height = tags.file['Image Height']?.value as number;
+      raw.width = tags.file['Image Width']?.value as number;
+      raw.height = tags.file['Image Height']?.value as number;
     }
     
     // GPS data
     if (tags.gps) {
-      exif.gpsLatitude = tags.gps.Latitude;
-      exif.gpsLongitude = tags.gps.Longitude;
+      display.gpsLatitude = tags.gps.Latitude;
+      display.gpsLongitude = tags.gps.Longitude;
     }
     
-    return exif;
+    return { display, raw };
   } catch (error) {
     console.error('Error extracting EXIF:', error);
-    return {};
+    return { display: {}, raw: {} };
   }
 }
 
 export function generateAiExif(existingExif: ExifData): ExifData {
   const enhanced: ExifData = { ...existingExif };
   
-  // Generate missing metadata with reasonable defaults
   if (!enhanced.software) {
     enhanced.software = 'PhotoMaster AI Enhanced';
   }
@@ -58,6 +96,72 @@ export function generateAiExif(existingExif: ExifData): ExifData {
   if (!enhanced.colorSpace) {
     enhanced.colorSpace = 'sRGB';
   }
+
+  // Generate camera data if missing (required by microstock sites)
+  if (!enhanced.make) {
+    enhanced.make = 'Digital Camera';
+  }
+  if (!enhanced.model) {
+    enhanced.model = 'Professional DSLR';
+  }
+  if (!enhanced.exposureTime) {
+    enhanced.exposureTime = '1/125';
+  }
+  if (!enhanced.fNumber) {
+    enhanced.fNumber = 'f/5.6';
+  }
+  if (!enhanced.iso) {
+    enhanced.iso = 200;
+  }
+  if (!enhanced.focalLength) {
+    enhanced.focalLength = '50mm';
+  }
+  
+  return enhanced;
+}
+
+export function generateRawExif(existingRaw: RawExifData, width?: number, height?: number): RawExifData {
+  const enhanced: RawExifData = { ...existingRaw };
+  
+  // Required camera data for microstock sites
+  if (!enhanced.make) {
+    enhanced.make = 'Digital Camera';
+  }
+  if (!enhanced.model) {
+    enhanced.model = 'Professional DSLR';
+  }
+  if (!enhanced.dateTime) {
+    enhanced.dateTime = new Date().toISOString().replace('T', ' ').split('.')[0];
+  }
+  if (!enhanced.exposureTime) {
+    enhanced.exposureTime = 1/125;
+  }
+  if (!enhanced.fNumber) {
+    enhanced.fNumber = 5.6;
+  }
+  if (!enhanced.iso) {
+    enhanced.iso = 200;
+  }
+  if (!enhanced.focalLength) {
+    enhanced.focalLength = 50;
+  }
+  if (!enhanced.colorSpace) {
+    enhanced.colorSpace = 1; // sRGB
+  }
+  if (!enhanced.orientation) {
+    enhanced.orientation = 1;
+  }
+  if (!enhanced.flash) {
+    enhanced.flash = 0;
+  }
+  if (!enhanced.whiteBalance) {
+    enhanced.whiteBalance = 0;
+  }
+  
+  enhanced.software = 'PhotoMaster AI Enhanced';
+  
+  if (width) enhanced.width = width;
+  if (height) enhanced.height = height;
   
   return enhanced;
 }
@@ -100,3 +204,13 @@ export const exifLabels: Record<string, string> = {
   gpsLatitude: 'GPS Latitude',
   gpsLongitude: 'GPS Longitude',
 };
+
+// Convert file to data URL
+export function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
