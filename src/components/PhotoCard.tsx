@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { PhotoFile } from '@/types/photo';
+import { PhotoFile, FilterType } from '@/types/photo';
 import { ExifPanel } from './ExifPanel';
+import { FilterSelector } from './FilterSelector';
 import { Button } from '@/components/ui/button';
 import { Download, Sparkles, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -10,10 +11,11 @@ interface PhotoCardProps {
   photo: PhotoFile;
   onEnhance: (id: string) => void;
   onRemove: (id: string) => void;
+  onFilterChange: (id: string, filter: FilterType) => void;
   isEnhancing: boolean;
 }
 
-export function PhotoCard({ photo, onEnhance, onRemove, isEnhancing }: PhotoCardProps) {
+export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhancing }: PhotoCardProps) {
   const [showEnhanced, setShowEnhanced] = useState(false);
   
   const displayImage = showEnhanced && photo.enhancedPreview ? photo.enhancedPreview : photo.preview;
@@ -113,6 +115,16 @@ export function PhotoCard({ photo, onEnhance, onRemove, isEnhancing }: PhotoCard
           <span className="text-xs text-muted-foreground">
             {(photo.file.size / 1024 / 1024).toFixed(2)} MB
           </span>
+        </div>
+
+        {/* Filter Selection */}
+        <div className="space-y-2">
+          <span className="text-xs text-muted-foreground">Enhancement Filter:</span>
+          <FilterSelector
+            selected={photo.selectedFilter}
+            onSelect={(filter) => onFilterChange(photo.id, filter)}
+            disabled={isEnhancing}
+          />
         </div>
 
         {/* EXIF Data */}

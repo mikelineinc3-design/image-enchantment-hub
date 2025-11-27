@@ -1,3 +1,5 @@
+export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural';
+
 export interface ExifData {
   make?: string;
   model?: string;
@@ -39,11 +41,12 @@ export interface PhotoFile {
   id: string;
   file: File;
   preview: string;
-  originalDataUrl: string; // Full data URL with EXIF
+  originalDataUrl: string;
   originalExif: ExifData;
-  rawExif: RawExifData; // Numeric values for embedding
+  rawExif: RawExifData;
   enhancedExif: ExifData;
   enhancedPreview?: string;
   status: 'uploaded' | 'extracting' | 'enhancing' | 'ready' | 'error';
   error?: string;
+  selectedFilter: FilterType;
 }

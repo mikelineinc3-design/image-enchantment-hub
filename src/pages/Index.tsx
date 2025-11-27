@@ -3,9 +3,10 @@ import { Header } from '@/components/Header';
 import { PhotoUploader } from '@/components/PhotoUploader';
 import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
-import { PhotoFile } from '@/types/photo';
-import { extractExif, generateAiExif, generateRawExif, fileToDataUrl } from '@/lib/exif';
-import { embedExifIntoJpeg } from '@/lib/exifWriter';
+import { BatchActions } from '@/components/BatchActions';
+import { PhotoFile, FilterType } from '@/types/photo';
+import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
+import { enhanceImageWithAI, enhanceImageLocally } from '@/lib/imageEnhancer';
 import { toast } from 'sonner';
 
 function generateId(): string {
@@ -15,7 +16,8 @@ function generateId(): string {
 const Index = () => {
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [enhancingId, setEnhancingId] = useState<string | null>(null);
+  const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
+  const [batchFilter, setBatchFilter] = useState<FilterType>('default');
 
   const currentStep = photos.length === 0 ? 1 : 
     photos.some(p => p.status === 'ready') ? 4 :
@@ -42,12 +44,12 @@ const Index = () => {
         rawExif: {},
         enhancedExif: {},
         status: 'extracting',
+        selectedFilter: batchFilter,
       };
 
       setPhotos(prev => [...prev, newPhoto]);
       toast.success(`${file.name} uploaded`);
 
-      // Extract EXIF and get data URL
       try {
         const [exifResult, dataUrl] = await Promise.all([
           extractExif(file),
@@ -78,65 +80,37 @@ const Index = () => {
         toast.error(`Failed to extract EXIF from ${file.name}`);
       }
     }
-  }, []);
+  }, [batchFilter]);
 
   const handleEnhance = useCallback(async (id: string) => {
     const photo = photos.find(p => p.id === id);
-    if (!photo) return;
+    if (!photo || photo.status === 'enhancing') return;
 
-    setEnhancingId(id);
+    setEnhancingIds(prev => new Set(prev).add(id));
     setPhotos(prev => prev.map(p => 
       p.id === id ? { ...p, status: 'enhancing' } : p
     ));
 
-    toast.info('Enhancing image with EXIF data... This may take a moment');
+    toast.info(`Enhancing with ${photo.selectedFilter} filter...`);
 
     try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
+      let enhancedDataUrl: string;
       
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          
-          if (ctx) {
-            ctx.drawImage(img, 0, 0);
-            
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            
-            // Enhance colors - increase saturation and contrast
-            for (let i = 0; i < data.length; i += 4) {
-              const factor = 1.15;
-              data[i] = Math.min(255, Math.max(0, factor * (data[i] - 128) + 128));
-              data[i + 1] = Math.min(255, Math.max(0, factor * (data[i + 1] - 128) + 128));
-              data[i + 2] = Math.min(255, Math.max(0, factor * (data[i + 2] - 128) + 128));
-              
-              const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-              const satBoost = 1.2;
-              data[i] = Math.min(255, Math.max(0, avg + satBoost * (data[i] - avg)));
-              data[i + 1] = Math.min(255, Math.max(0, avg + satBoost * (data[i + 1] - avg)));
-              data[i + 2] = Math.min(255, Math.max(0, avg + satBoost * (data[i + 2] - avg)));
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
-          }
-          resolve();
-        };
-        img.onerror = reject;
-        img.src = photo.preview;
-      });
-
-      // Get enhanced image as JPEG data URL (JPEG supports EXIF)
-      let enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      
-      // Generate complete EXIF data (fill in missing camera data)
-      const completeRawExif = generateRawExif(photo.rawExif, canvas.width, canvas.height);
-      
-      // Embed EXIF data into the enhanced image
-      enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+      try {
+        enhancedDataUrl = await enhanceImageWithAI(
+          photo.originalDataUrl || photo.preview,
+          photo.selectedFilter,
+          photo.rawExif
+        );
+      } catch (aiError) {
+        console.warn('AI enhancement failed, using local fallback:', aiError);
+        toast.info('Using local enhancement...');
+        enhancedDataUrl = await enhanceImageLocally(
+          photo.originalDataUrl || photo.preview,
+          photo.selectedFilter,
+          photo.rawExif
+        );
+      }
       
       setPhotos(prev => prev.map(p => 
         p.id === id 
@@ -152,8 +126,60 @@ const Index = () => {
       ));
       toast.error('Failed to enhance image');
     } finally {
-      setEnhancingId(null);
+      setEnhancingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
+  }, [photos]);
+
+  const handleEnhanceAll = useCallback(async () => {
+    const toEnhance = photos.filter(p => p.status === 'uploaded' || p.status === 'ready' || p.status === 'error');
+    
+    if (toEnhance.length === 0) {
+      toast.info('No photos to enhance');
+      return;
+    }
+
+    toast.info(`Starting batch enhancement of ${toEnhance.length} photos...`);
+    
+    for (const photo of toEnhance) {
+      await handleEnhance(photo.id);
+    }
+    
+    toast.success('Batch enhancement complete!');
+  }, [photos, handleEnhance]);
+
+  const handleDownloadAll = useCallback(() => {
+    const readyPhotos = photos.filter(p => p.status === 'ready' && p.enhancedPreview);
+    
+    if (readyPhotos.length === 0) {
+      toast.info('No enhanced photos to download');
+      return;
+    }
+
+    readyPhotos.forEach(photo => {
+      const byteString = atob(photo.enhancedPreview!.split(',')[1]);
+      const mimeString = photo.enhancedPreview!.split(',')[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+      const blob = new Blob([ab], { type: mimeString });
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const baseName = photo.file.name.replace(/\.[^/.]+$/, '');
+      link.download = `${baseName}_enhanced.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    });
+    
+    toast.success(`Downloaded ${readyPhotos.length} enhanced photos!`);
   }, [photos]);
 
   const handleRemove = useCallback((id: string) => {
@@ -166,6 +192,20 @@ const Index = () => {
     });
     toast.info('Photo removed');
   }, []);
+
+  const handleFilterChange = useCallback((id: string, filter: FilterType) => {
+    setPhotos(prev => prev.map(p => 
+      p.id === id ? { ...p, selectedFilter: filter } : p
+    ));
+  }, []);
+
+  const handleBatchFilterChange = useCallback((filter: FilterType) => {
+    setBatchFilter(filter);
+    setPhotos(prev => prev.map(p => ({ ...p, selectedFilter: filter })));
+  }, []);
+
+  const readyCount = photos.filter(p => p.status === 'ready').length;
+  const isEnhancing = enhancingIds.size > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -182,6 +222,16 @@ const Index = () => {
           />
         </div>
 
+        <BatchActions
+          photoCount={photos.length}
+          readyCount={readyCount}
+          selectedFilter={batchFilter}
+          onFilterChange={handleBatchFilterChange}
+          onEnhanceAll={handleEnhanceAll}
+          onDownloadAll={handleDownloadAll}
+          isEnhancing={isEnhancing}
+        />
+
         {photos.length > 0 && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {photos.map(photo => (
@@ -190,7 +240,8 @@ const Index = () => {
                 photo={photo}
                 onEnhance={handleEnhance}
                 onRemove={handleRemove}
-                isEnhancing={enhancingId === photo.id}
+                onFilterChange={handleFilterChange}
+                isEnhancing={enhancingIds.has(photo.id)}
               />
             ))}
           </div>
