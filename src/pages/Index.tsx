@@ -4,9 +4,10 @@ import { PhotoUploader } from '@/components/PhotoUploader';
 import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
-import { PhotoFile, FilterType } from '@/types/photo';
+import { PhotoFile, FilterType, FileType } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally } from '@/lib/imageEnhancer';
+import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { toast } from 'sonner';
 
 function generateId(): string {
@@ -18,10 +19,11 @@ const Index = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
   const [batchFilter, setBatchFilter] = useState<FilterType>('default');
+  const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
 
   const currentStep = photos.length === 0 ? 1 : 
     photos.some(p => p.status === 'ready') ? 4 :
-    photos.some(p => p.status === 'enhancing') ? 3 : 2;
+    photos.some(p => p.status === 'enhancing' || p.status === 'generating-metadata') ? 3 : 2;
 
   const handleUpload = useCallback(async (files: FileList) => {
     const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
@@ -45,6 +47,7 @@ const Index = () => {
         enhancedExif: {},
         status: 'extracting',
         selectedFilter: batchFilter,
+        fileType: batchFileType,
       };
 
       setPhotos(prev => [...prev, newPhoto]);
@@ -80,11 +83,11 @@ const Index = () => {
         toast.error(`Failed to extract EXIF from ${file.name}`);
       }
     }
-  }, [batchFilter]);
+  }, [batchFilter, batchFileType]);
 
   const handleEnhance = useCallback(async (id: string) => {
     const photo = photos.find(p => p.id === id);
-    if (!photo || photo.status === 'enhancing') return;
+    if (!photo || photo.status === 'enhancing' || photo.status === 'generating-metadata') return;
 
     setEnhancingIds(prev => new Set(prev).add(id));
     setPhotos(prev => prev.map(p => 
@@ -94,13 +97,19 @@ const Index = () => {
     toast.info(`Enhancing with ${photo.selectedFilter} filter...`);
 
     try {
+      // Get original dimensions from raw exif or from the image
+      const originalWidth = photo.rawExif.width || photo.originalExif.width || 0;
+      const originalHeight = photo.rawExif.height || photo.originalExif.height || 0;
+      
       let enhancedDataUrl: string;
       
       try {
         enhancedDataUrl = await enhanceImageWithAI(
           photo.originalDataUrl || photo.preview,
           photo.selectedFilter,
-          photo.rawExif
+          photo.rawExif,
+          originalWidth,
+          originalHeight
         );
       } catch (aiError) {
         console.warn('AI enhancement failed, using local fallback:', aiError);
@@ -108,17 +117,44 @@ const Index = () => {
         enhancedDataUrl = await enhanceImageLocally(
           photo.originalDataUrl || photo.preview,
           photo.selectedFilter,
-          photo.rawExif
+          photo.rawExif,
+          originalWidth,
+          originalHeight
         );
       }
       
+      // Update with enhanced image
       setPhotos(prev => prev.map(p => 
         p.id === id 
-          ? { ...p, enhancedPreview: enhancedDataUrl, status: 'ready' }
+          ? { ...p, enhancedPreview: enhancedDataUrl, status: 'generating-metadata' }
           : p
       ));
       
-      toast.success('Image enhanced with full EXIF data!');
+      toast.info('Generating microstock metadata...');
+      
+      // Generate metadata
+      try {
+        const metadata = await generateMicrostockMetadata(
+          enhancedDataUrl,
+          photo.fileType
+        );
+        
+        setPhotos(prev => prev.map(p => 
+          p.id === id 
+            ? { ...p, metadata, status: 'ready' }
+            : p
+        ));
+        
+        toast.success('Image enhanced with EXIF data and metadata generated!');
+      } catch (metadataError) {
+        console.warn('Metadata generation failed:', metadataError);
+        setPhotos(prev => prev.map(p => 
+          p.id === id 
+            ? { ...p, status: 'ready' }
+            : p
+        ));
+        toast.success('Image enhanced! Metadata generation failed.');
+      }
     } catch (error) {
       console.error('Enhancement error:', error);
       setPhotos(prev => prev.map(p => 
@@ -171,8 +207,9 @@ const Index = () => {
       
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      const baseName = photo.file.name.replace(/\.[^/.]+$/, '');
-      link.download = `${baseName}_enhanced.jpg`;
+      // Use suggested filename from metadata if available
+      const filename = photo.metadata?.filename || `${photo.file.name.replace(/\.[^/.]+$/, '')}_enhanced.jpg`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -199,9 +236,20 @@ const Index = () => {
     ));
   }, []);
 
+  const handleFileTypeChange = useCallback((id: string, fileType: FileType) => {
+    setPhotos(prev => prev.map(p => 
+      p.id === id ? { ...p, fileType } : p
+    ));
+  }, []);
+
   const handleBatchFilterChange = useCallback((filter: FilterType) => {
     setBatchFilter(filter);
     setPhotos(prev => prev.map(p => ({ ...p, selectedFilter: filter })));
+  }, []);
+
+  const handleBatchFileTypeChange = useCallback((fileType: FileType) => {
+    setBatchFileType(fileType);
+    setPhotos(prev => prev.map(p => ({ ...p, fileType })));
   }, []);
 
   const readyCount = photos.filter(p => p.status === 'ready').length;
@@ -226,7 +274,9 @@ const Index = () => {
           photoCount={photos.length}
           readyCount={readyCount}
           selectedFilter={batchFilter}
+          selectedFileType={batchFileType}
           onFilterChange={handleBatchFilterChange}
+          onFileTypeChange={handleBatchFileTypeChange}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
           isEnhancing={isEnhancing}
@@ -241,6 +291,7 @@ const Index = () => {
                 onEnhance={handleEnhance}
                 onRemove={handleRemove}
                 onFilterChange={handleFilterChange}
+                onFileTypeChange={handleFileTypeChange}
                 isEnhancing={enhancingIds.has(photo.id)}
               />
             ))}

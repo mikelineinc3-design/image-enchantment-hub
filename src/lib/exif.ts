@@ -85,9 +85,8 @@ export async function extractExif(file: File): Promise<{ display: ExifData; raw:
 export function generateAiExif(existingExif: ExifData): ExifData {
   const enhanced: ExifData = { ...existingExif };
   
-  if (!enhanced.software) {
-    enhanced.software = 'PhotoMaster AI Enhanced';
-  }
+  // Always set software to Photoshop for microstock compatibility
+  enhanced.software = 'Adobe Photoshop CS6 (Windows)';
   
   if (!enhanced.dateTime) {
     enhanced.dateTime = new Date().toISOString().split('T')[0].replace(/-/g, ':') + ' 12:00:00';
@@ -96,26 +95,6 @@ export function generateAiExif(existingExif: ExifData): ExifData {
   if (!enhanced.colorSpace) {
     enhanced.colorSpace = 'sRGB';
   }
-
-  // Generate camera data if missing (required by microstock sites)
-  if (!enhanced.make) {
-    enhanced.make = 'Digital Camera';
-  }
-  if (!enhanced.model) {
-    enhanced.model = 'Professional DSLR';
-  }
-  if (!enhanced.exposureTime) {
-    enhanced.exposureTime = '1/125';
-  }
-  if (!enhanced.fNumber) {
-    enhanced.fNumber = 'f/5.6';
-  }
-  if (!enhanced.iso) {
-    enhanced.iso = 200;
-  }
-  if (!enhanced.focalLength) {
-    enhanced.focalLength = '50mm';
-  }
   
   return enhanced;
 }
@@ -123,45 +102,20 @@ export function generateAiExif(existingExif: ExifData): ExifData {
 export function generateRawExif(existingRaw: RawExifData, width?: number, height?: number): RawExifData {
   const enhanced: RawExifData = { ...existingRaw };
   
-  // Required camera data for microstock sites
-  if (!enhanced.make) {
-    enhanced.make = 'Digital Camera';
-  }
-  if (!enhanced.model) {
-    enhanced.model = 'Professional DSLR';
-  }
-  if (!enhanced.dateTime) {
-    enhanced.dateTime = new Date().toISOString().replace('T', ' ').split('.')[0];
-  }
-  if (!enhanced.exposureTime) {
-    enhanced.exposureTime = 1/125;
-  }
-  if (!enhanced.fNumber) {
-    enhanced.fNumber = 5.6;
-  }
-  if (!enhanced.iso) {
-    enhanced.iso = 200;
-  }
-  if (!enhanced.focalLength) {
-    enhanced.focalLength = 50;
-  }
+  // Always set software to Photoshop for microstock compatibility
+  enhanced.software = 'Adobe Photoshop CS6 (Windows)';
+  
+  // Set dimensions if provided (use original image dimensions)
+  if (width) enhanced.width = width;
+  if (height) enhanced.height = height;
+  
+  // Only set defaults for truly missing required fields
   if (!enhanced.colorSpace) {
     enhanced.colorSpace = 1; // sRGB
   }
   if (!enhanced.orientation) {
     enhanced.orientation = 1;
   }
-  if (!enhanced.flash) {
-    enhanced.flash = 0;
-  }
-  if (!enhanced.whiteBalance) {
-    enhanced.whiteBalance = 0;
-  }
-  
-  enhanced.software = 'PhotoMaster AI Enhanced';
-  
-  if (width) enhanced.width = width;
-  if (height) enhanced.height = height;
   
   return enhanced;
 }
