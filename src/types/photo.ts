@@ -1,4 +1,5 @@
 export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural';
+export type FileType = 'jpg' | 'png' | 'eps' | 'svg';
 
 export interface ExifData {
   make?: string;
@@ -37,6 +38,14 @@ export interface RawExifData {
   whiteBalance?: number;
 }
 
+export interface MicrostockMetadata {
+  filename: string;
+  title: string;
+  keywords: string;
+  adobeCategory: string;
+  shutterstockCategory: string;
+}
+
 export interface PhotoFile {
   id: string;
   file: File;
@@ -46,7 +55,9 @@ export interface PhotoFile {
   rawExif: RawExifData;
   enhancedExif: ExifData;
   enhancedPreview?: string;
-  status: 'uploaded' | 'extracting' | 'enhancing' | 'ready' | 'error';
+  status: 'uploaded' | 'extracting' | 'enhancing' | 'generating-metadata' | 'ready' | 'error';
   error?: string;
   selectedFilter: FilterType;
+  fileType: FileType;
+  metadata?: MicrostockMetadata;
 }

@@ -6,7 +6,9 @@ import { generateRawExif } from './exif';
 export async function enhanceImageWithAI(
   imageDataUrl: string,
   filter: FilterType,
-  rawExif: RawExifData
+  rawExif: RawExifData,
+  originalWidth: number,
+  originalHeight: number
 ): Promise<string> {
   const { data, error } = await supabase.functions.invoke('enhance-image', {
     body: { imageBase64: imageDataUrl, filter }
@@ -23,26 +25,44 @@ export async function enhanceImageWithAI(
 
   let enhancedDataUrl = data.enhancedImage;
   
-  // Extract dimensions from enhanced image
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = reject;
-    img.src = enhancedDataUrl;
-  });
+  // Resize back to original dimensions to preserve size
+  enhancedDataUrl = await resizeToOriginal(enhancedDataUrl, originalWidth, originalHeight);
   
-  // Generate complete EXIF data and embed into enhanced image
-  const completeRawExif = generateRawExif(rawExif, img.width, img.height);
+  // Generate complete EXIF data using original extracted data and embed into enhanced image
+  const completeRawExif = generateRawExif(rawExif, originalWidth, originalHeight);
   enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
   
   return enhancedDataUrl;
+}
+
+// Resize image back to original dimensions
+async function resizeToOriginal(dataUrl: string, targetWidth: number, targetHeight: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
+      } else {
+        reject(new Error('Failed to get canvas context'));
+      }
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
 }
 
 // Fallback local enhancement for when AI is unavailable
 export async function enhanceImageLocally(
   imageDataUrl: string,
   filter: FilterType,
-  rawExif: RawExifData
+  rawExif: RawExifData,
+  originalWidth: number,
+  originalHeight: number
 ): Promise<string> {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -50,11 +70,12 @@ export async function enhanceImageLocally(
   
   await new Promise<void>((resolve, reject) => {
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      // Use original dimensions, not the image's current dimensions
+      canvas.width = originalWidth;
+      canvas.height = originalHeight;
       
       if (ctx) {
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, originalWidth, originalHeight);
         
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
@@ -90,7 +111,7 @@ export async function enhanceImageLocally(
   });
 
   let enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-  const completeRawExif = generateRawExif(rawExif, canvas.width, canvas.height);
+  const completeRawExif = generateRawExif(rawExif, originalWidth, originalHeight);
   enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
   
   return enhancedDataUrl;

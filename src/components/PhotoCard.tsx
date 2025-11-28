@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { PhotoFile, FilterType } from '@/types/photo';
+import { PhotoFile, FilterType, FileType } from '@/types/photo';
 import { ExifPanel } from './ExifPanel';
 import { FilterSelector } from './FilterSelector';
+import { FileTypeSelector } from './FileTypeSelector';
+import { MetadataPanel } from './MetadataPanel';
 import { Button } from '@/components/ui/button';
-import { Download, Sparkles, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Download, Sparkles, Loader2, CheckCircle, AlertCircle, X, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -12,11 +14,13 @@ interface PhotoCardProps {
   onEnhance: (id: string) => void;
   onRemove: (id: string) => void;
   onFilterChange: (id: string, filter: FilterType) => void;
+  onFileTypeChange: (id: string, fileType: FileType) => void;
   isEnhancing: boolean;
 }
 
-export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhancing }: PhotoCardProps) {
+export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTypeChange, isEnhancing }: PhotoCardProps) {
   const [showEnhanced, setShowEnhanced] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(false);
   
   const displayImage = showEnhanced && photo.enhancedPreview ? photo.enhancedPreview : photo.preview;
 
@@ -26,7 +30,6 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
       return;
     }
     
-    // Create blob from data URL for proper download
     const byteString = atob(photo.enhancedPreview.split(',')[1]);
     const mimeString = photo.enhancedPreview.split(',')[0].split(':')[1].split(';')[0];
     const ab = new ArrayBuffer(byteString.length);
@@ -38,11 +41,8 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
     
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    
-    // Keep original name but ensure .jpg extension
-    const baseName = photo.file.name.replace(/\.[^/.]+$/, '');
-    link.download = `${baseName}_enhanced.jpg`;
-    
+    const filename = photo.metadata?.filename || `${photo.file.name.replace(/\.[^/.]+$/, '')}_enhanced.jpg`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -55,13 +55,22 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
     uploaded: null,
     extracting: <Loader2 className="w-4 h-4 animate-spin text-primary" />,
     enhancing: <Loader2 className="w-4 h-4 animate-spin text-primary" />,
+    'generating-metadata': <Loader2 className="w-4 h-4 animate-spin text-primary" />,
     ready: <CheckCircle className="w-4 h-4 text-primary" />,
     error: <AlertCircle className="w-4 h-4 text-destructive" />,
   };
 
+  const statusLabel = {
+    uploaded: 'uploaded',
+    extracting: 'extracting',
+    enhancing: 'enhancing',
+    'generating-metadata': 'generating metadata',
+    ready: 'ready',
+    error: 'error',
+  };
+
   return (
     <div className="gradient-card rounded-2xl border border-border overflow-hidden shadow-card transition-all duration-300 hover:shadow-glow hover:border-primary/30">
-      {/* Image Preview */}
       <div className="relative aspect-video bg-background/50">
         <img
           src={displayImage}
@@ -69,13 +78,11 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
           className="w-full h-full object-contain"
         />
         
-        {/* Status Badge */}
         <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border">
           {statusIcon[photo.status]}
-          <span className="text-xs font-medium capitalize">{photo.status}</span>
+          <span className="text-xs font-medium capitalize">{statusLabel[photo.status]}</span>
         </div>
 
-        {/* Remove Button */}
         <button
           onClick={() => onRemove(photo.id)}
           className="absolute top-3 right-3 p-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border hover:bg-destructive/20 hover:border-destructive/50 transition-colors"
@@ -83,7 +90,6 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
           <X className="w-4 h-4" />
         </button>
 
-        {/* Toggle Original/Enhanced */}
         {photo.enhancedPreview && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex rounded-full bg-background/80 backdrop-blur-sm border border-border p-1">
             <button
@@ -108,7 +114,6 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
         )}
       </div>
 
-      {/* Content */}
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground truncate flex-1 mr-2">{photo.file.name}</h3>
@@ -117,7 +122,15 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
           </span>
         </div>
 
-        {/* Filter Selection */}
+        <div className="space-y-2">
+          <span className="text-xs text-muted-foreground">File Type (for metadata):</span>
+          <FileTypeSelector
+            selected={photo.fileType}
+            onSelect={(type) => onFileTypeChange(photo.id, type)}
+            disabled={isEnhancing}
+          />
+        </div>
+
         <div className="space-y-2">
           <span className="text-xs text-muted-foreground">Enhancement Filter:</span>
           <FilterSelector
@@ -127,17 +140,28 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
           />
         </div>
 
-        {/* EXIF Data */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <ExifPanel exif={photo.originalExif} title="Original EXIF" variant="original" />
           <ExifPanel exif={photo.enhancedExif} title="Enhanced EXIF" variant="enhanced" />
         </div>
 
-        {/* Actions */}
+        {photo.metadata && (
+          <div className="space-y-2">
+            <button
+              onClick={() => setShowMetadata(!showMetadata)}
+              className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              {showMetadata ? 'Hide' : 'Show'} Microstock Metadata
+            </button>
+            {showMetadata && <MetadataPanel metadata={photo.metadata} />}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button
             onClick={() => onEnhance(photo.id)}
-            disabled={isEnhancing || photo.status === 'enhancing'}
+            disabled={isEnhancing || photo.status === 'enhancing' || photo.status === 'generating-metadata'}
             variant="glow"
             className="flex-1"
           >
@@ -145,6 +169,11 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, isEnhanc
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Enhancing...
+              </>
+            ) : photo.status === 'generating-metadata' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating Metadata...
               </>
             ) : (
               <>

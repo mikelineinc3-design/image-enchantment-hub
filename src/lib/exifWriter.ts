@@ -26,18 +26,10 @@ function toRational(value: number): [number, number] {
 // Generate default camera EXIF data if none exists
 export function generateDefaultCameraExif(): CameraExifData {
   return {
-    make: 'Digital Camera',
-    model: 'Professional DSLR',
     dateTime: new Date().toISOString().replace('T', ' ').split('.')[0],
-    exposureTime: 1/125,
-    fNumber: 5.6,
-    iso: 200,
-    focalLength: 50,
-    software: 'PhotoMaster AI Enhanced',
+    software: 'Adobe Photoshop CS6 (Windows)',
     orientation: 1,
     colorSpace: 1, // sRGB
-    flash: 0,
-    whiteBalance: 0, // Auto
   };
 }
 
