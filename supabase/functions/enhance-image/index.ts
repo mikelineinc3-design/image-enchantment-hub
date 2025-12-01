@@ -5,17 +5,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const ALLOWED_FILTERS = ['vibrant', 'cinematic', 'natural', 'default'];
+const MAX_BASE64_SIZE = 20 * 1024 * 1024;
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { imageBase64, filter } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const { imageBase64, filter = 'default', customApiKeys } = await req.json();
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    // Input validation
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      return new Response(JSON.stringify({ error: 'Invalid image data' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    if (imageBase64.length > MAX_BASE64_SIZE) {
+      return new Response(JSON.stringify({ error: 'Image too large' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const safeFilter = ALLOWED_FILTERS.includes(filter) ? filter : 'default';
+    
+    // Collect API keys - custom keys first, then Lovable key
+    const apiKeys: string[] = [];
+    if (customApiKeys && Array.isArray(customApiKeys)) {
+      apiKeys.push(...customApiKeys.filter((k: unknown) => typeof k === 'string' && (k as string).length > 20));
+    }
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (LOVABLE_API_KEY) {
+      apiKeys.push(LOVABLE_API_KEY);
+    }
+    
+    if (apiKeys.length === 0) {
+      return new Response(JSON.stringify({ error: 'Service temporarily unavailable' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     const filterPrompts: Record<string, string> = {
@@ -25,78 +57,87 @@ serve(async (req) => {
       default: "Enhance this photo professionally. Improve overall quality, adjust exposure, increase color vibrancy while keeping it realistic. Make it look high quality and appealing."
     };
 
-    const prompt = filterPrompts[filter] || filterPrompts.default;
+    const prompt = filterPrompts[safeFilter] || filterPrompts.default;
+    console.log(`Processing image with filter: ${safeFilter}, available keys: ${apiKeys.length}`);
 
-    console.log(`Processing image with filter: ${filter}`);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: [
+    // Try each API key until one works
+    let lastError = null;
+    for (let i = 0; i < apiKeys.length; i++) {
+      const apiKey = apiKeys[i];
+      try {
+        console.log(`Trying API key ${i + 1}/${apiKeys.length}`);
+        
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-image-preview",
+            messages: [
               {
-                type: "text",
-                text: prompt
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: imageBase64
-                }
+                role: "user",
+                content: [
+                  { type: "text", text: prompt },
+                  { type: "image_url", image_url: { url: imageBase64 } }
+                ]
               }
-            ]
-          }
-        ],
-        modalities: ["image", "text"]
-      }),
-    });
+            ],
+            modalities: ["image", "text"]
+          }),
+        });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429,
+        if (response.status === 429) {
+          console.log('Rate limited, trying next key...');
+          lastError = new Error('Rate limited');
+          continue;
+        }
+
+        if (response.status === 402) {
+          console.log('Payment required, trying next key...');
+          lastError = new Error('Payment required');
+          continue;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("API error:", response.status, errorText);
+          lastError = new Error(`API error: ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        
+        if (!enhancedImageUrl) {
+          console.error("No image in response");
+          lastError = new Error("No enhanced image returned");
+          continue;
+        }
+
+        console.log("Image enhanced successfully");
+        return new Response(JSON.stringify({ 
+          enhancedImage: enhancedImageUrl,
+          message: data.choices?.[0]?.message?.content || "Image enhanced successfully"
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      } catch (error) {
+        console.error('Error with API key:', error);
+        lastError = error;
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits to continue." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
     }
 
-    const data = await response.json();
-    console.log("AI response received");
-    
-    const enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
-    if (!enhancedImageUrl) {
-      console.error("No image in response:", JSON.stringify(data));
-      throw new Error("No enhanced image returned from AI");
-    }
-
-    return new Response(JSON.stringify({ 
-      enhancedImage: enhancedImageUrl,
-      message: data.choices?.[0]?.message?.content || "Image enhanced successfully"
-    }), {
+    // All keys failed
+    console.error('All API keys failed:', lastError);
+    return new Response(JSON.stringify({ error: 'Enhancement service unavailable. Please try again.' }), {
+      status: 503,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Error in enhance-image function:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Unknown error" 
-    }), {
+    return new Response(JSON.stringify({ error: 'Failed to process image' }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
