@@ -41,6 +41,7 @@ export interface RawExifData {
 export interface MicrostockMetadata {
   filename: string;
   title: string;
+  description: string;
   keywords: string;
   adobeCategory: string;
   shutterstockCategory: string;
