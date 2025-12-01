@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { PhotoFile, FilterType, FileType } from '@/types/photo';
-import { ExifPanel } from './ExifPanel';
 import { FilterSelector } from './FilterSelector';
 import { FileTypeSelector } from './FileTypeSelector';
 import { MetadataPanel } from './MetadataPanel';
@@ -140,10 +139,6 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTy
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <ExifPanel exif={photo.originalExif} title="Original EXIF" variant="original" />
-          <ExifPanel exif={photo.enhancedExif} title="Enhanced EXIF" variant="enhanced" />
-        </div>
 
         {photo.metadata && (
           <div className="space-y-2">
