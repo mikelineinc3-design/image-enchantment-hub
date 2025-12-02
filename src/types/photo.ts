@@ -1,4 +1,4 @@
-export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural';
+export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural' | 'product' | 'sharpener' | 'hdr';
 export type FileType = 'jpg' | 'png' | 'eps' | 'svg';
 
 export interface ExifData {
@@ -58,7 +58,7 @@ export interface PhotoFile {
   enhancedPreview?: string;
   status: 'uploaded' | 'extracting' | 'enhancing' | 'generating-metadata' | 'ready' | 'error';
   error?: string;
-  selectedFilter: FilterType;
+  selectedFilters: FilterType[];
   fileType: FileType;
   metadata?: MicrostockMetadata;
 }

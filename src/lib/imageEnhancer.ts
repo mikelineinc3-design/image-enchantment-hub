@@ -24,7 +24,7 @@ function calculateMinimumDimensions(width: number, height: number): { targetWidt
 
 export async function enhanceImageWithAI(
   imageDataUrl: string,
-  filter: FilterType,
+  filters: FilterType[],
   rawExif: RawExifData,
   originalWidth: number,
   originalHeight: number,
@@ -36,7 +36,7 @@ export async function enhanceImageWithAI(
   const { data, error } = await supabase.functions.invoke('enhance-image', {
     body: { 
       imageBase64: imageDataUrl, 
-      filter,
+      filters,
       customApiKeys
     }
   });
@@ -106,7 +106,7 @@ export function embedIptcXmpMetadata(
 // Fallback local enhancement for when AI is unavailable
 export async function enhanceImageLocally(
   imageDataUrl: string,
-  filter: FilterType,
+  filters: FilterType[],
   rawExif: RawExifData,
   originalWidth: number,
   originalHeight: number
@@ -131,22 +131,37 @@ export async function enhanceImageLocally(
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         
-        const settings = getFilterSettings(filter);
+        // Combine settings from all selected filters
+        const combinedSettings = getCombinedFilterSettings(filters);
         
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = Math.min(255, Math.max(0, settings.contrast * (data[i] - 128) + 128));
-          data[i + 1] = Math.min(255, Math.max(0, settings.contrast * (data[i + 1] - 128) + 128));
-          data[i + 2] = Math.min(255, Math.max(0, settings.contrast * (data[i + 2] - 128) + 128));
+          data[i] = Math.min(255, Math.max(0, combinedSettings.contrast * (data[i] - 128) + 128));
+          data[i + 1] = Math.min(255, Math.max(0, combinedSettings.contrast * (data[i + 1] - 128) + 128));
+          data[i + 2] = Math.min(255, Math.max(0, combinedSettings.contrast * (data[i + 2] - 128) + 128));
           
           const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-          data[i] = Math.min(255, Math.max(0, avg + settings.saturation * (data[i] - avg)));
-          data[i + 1] = Math.min(255, Math.max(0, avg + settings.saturation * (data[i + 1] - avg)));
-          data[i + 2] = Math.min(255, Math.max(0, avg + settings.saturation * (data[i + 2] - avg)));
+          data[i] = Math.min(255, Math.max(0, avg + combinedSettings.saturation * (data[i] - avg)));
+          data[i + 1] = Math.min(255, Math.max(0, avg + combinedSettings.saturation * (data[i + 1] - avg)));
+          data[i + 2] = Math.min(255, Math.max(0, avg + combinedSettings.saturation * (data[i + 2] - avg)));
           
-          if (filter === 'cinematic') {
+          // Cinematic color grading
+          if (filters.includes('cinematic')) {
             data[i] = Math.min(255, data[i] * 1.05);
             data[i + 2] = Math.min(255, data[i + 2] * 1.08);
           }
+          
+          // HDR shadow recovery
+          if (filters.includes('hdr')) {
+            const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            if (luminance < 80) {
+              const boost = 1 + (80 - luminance) / 200;
+              data[i] = Math.min(255, data[i] * boost);
+              data[i + 1] = Math.min(255, data[i + 1] * boost);
+              data[i + 2] = Math.min(255, data[i + 2] * boost);
+            }
+          }
+          
+          // Sharpening is simulated via contrast boost (already applied above)
         }
         
         ctx.putImageData(imageData, 0, 0);
@@ -172,7 +187,33 @@ function getFilterSettings(filter: FilterType) {
       return { contrast: 1.15, saturation: 0.95 };
     case 'natural':
       return { contrast: 1.08, saturation: 1.1 };
+    case 'product':
+      return { contrast: 1.12, saturation: 1.05 };
+    case 'sharpener':
+      return { contrast: 1.25, saturation: 1.0 };
+    case 'hdr':
+      return { contrast: 1.18, saturation: 1.15 };
     default:
       return { contrast: 1.15, saturation: 1.2 };
   }
+}
+
+function getCombinedFilterSettings(filters: FilterType[]) {
+  if (filters.length === 0) {
+    return { contrast: 1.15, saturation: 1.2 };
+  }
+  
+  let totalContrast = 0;
+  let totalSaturation = 0;
+  
+  for (const filter of filters) {
+    const settings = getFilterSettings(filter);
+    totalContrast += settings.contrast;
+    totalSaturation += settings.saturation;
+  }
+  
+  return {
+    contrast: totalContrast / filters.length,
+    saturation: totalSaturation / filters.length
+  };
 }
