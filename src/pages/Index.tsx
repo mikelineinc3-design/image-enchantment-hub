@@ -6,8 +6,9 @@ import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
 import { PhotoFile, FilterType, FileType } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
-import { enhanceImageWithAI, enhanceImageLocally } from '@/lib/imageEnhancer';
+import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
+import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { toast } from 'sonner';
 
 function generateId(): string {
@@ -139,13 +140,21 @@ const Index = () => {
           photo.fileType
         );
         
+        // Embed IPTC/XMP metadata into the enhanced image for Shutterstock compatibility
+        const finalEnhancedImage = embedIptcXmpMetadata(
+          enhancedDataUrl,
+          metadata.title,
+          metadata.description,
+          metadata.keywords
+        );
+        
         setPhotos(prev => prev.map(p => 
           p.id === id 
-            ? { ...p, metadata, status: 'ready' }
+            ? { ...p, enhancedPreview: finalEnhancedImage, metadata, status: 'ready' }
             : p
         ));
         
-        toast.success('Image enhanced with EXIF data and metadata generated!');
+        toast.success('Image enhanced with EXIF & IPTC/XMP metadata!');
       } catch (metadataError) {
         console.warn('Metadata generation failed:', metadataError);
         setPhotos(prev => prev.map(p => 
@@ -187,7 +196,7 @@ const Index = () => {
     toast.success('Batch enhancement complete!');
   }, [photos, handleEnhance]);
 
-  const handleDownloadAll = useCallback(() => {
+  const handleDownloadAll = useCallback(async () => {
     const readyPhotos = photos.filter(p => p.status === 'ready' && p.enhancedPreview);
     
     if (readyPhotos.length === 0) {
@@ -195,28 +204,14 @@ const Index = () => {
       return;
     }
 
-    readyPhotos.forEach(photo => {
-      const byteString = atob(photo.enhancedPreview!.split(',')[1]);
-      const mimeString = photo.enhancedPreview!.split(',')[0].split(':')[1].split(';')[0];
-      const ab = new ArrayBuffer(byteString.length);
-      const ia = new Uint8Array(ab);
-      for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-      }
-      const blob = new Blob([ab], { type: mimeString });
-      
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      // Use suggested filename from metadata if available
-      const filename = photo.metadata?.filename || `${photo.file.name.replace(/\.[^/.]+$/, '')}_enhanced.jpg`;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-    });
-    
-    toast.success(`Downloaded ${readyPhotos.length} enhanced photos!`);
+    try {
+      toast.info('Creating ZIP file with all enhanced photos...');
+      await downloadAllAsZip(readyPhotos);
+      toast.success(`Downloaded ${readyPhotos.length} enhanced photos as ZIP!`);
+    } catch (error) {
+      console.error('ZIP download error:', error);
+      toast.error('Failed to create ZIP file');
+    }
   }, [photos]);
 
   const handleRemove = useCallback((id: string) => {
