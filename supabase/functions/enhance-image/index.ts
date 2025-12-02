@@ -67,6 +67,10 @@ serve(async (req) => {
       try {
         console.log(`Trying API key ${i + 1}/${apiKeys.length}`);
         
+        // Add timeout to prevent hanging connections
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+        
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -86,7 +90,10 @@ serve(async (req) => {
             ],
             modalities: ["image", "text"]
           }),
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
 
         if (response.status === 429) {
           console.log('Rate limited, trying next key...');
@@ -124,8 +131,13 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (error) {
-        console.error('Error with API key:', error);
-        lastError = error;
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('Request timed out');
+          lastError = new Error('Request timed out');
+        } else {
+          console.error('Error with API key:', error);
+          lastError = error instanceof Error ? error : new Error(String(error));
+        }
       }
     }
 
