@@ -4,11 +4,13 @@ import { PhotoUploader } from '@/components/PhotoUploader';
 import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
+import { ApiKeyManager } from '@/components/ApiKeyManager';
 import { PhotoFile, FilterType, FileType } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
+import { useApiKeys } from '@/hooks/useApiKeys';
 import { toast } from 'sonner';
 
 function generateId(): string {
@@ -19,8 +21,10 @@ const Index = () => {
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
-  const [batchFilter, setBatchFilter] = useState<FilterType>('default');
+  const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
+  
+  const { apiKeys, addKey, removeKey, getNextKey } = useApiKeys();
 
   const currentStep = photos.length === 0 ? 1 : 
     photos.some(p => p.status === 'ready') ? 4 :
@@ -47,7 +51,7 @@ const Index = () => {
         rawExif: {},
         enhancedExif: {},
         status: 'extracting',
-        selectedFilter: batchFilter,
+        selectedFilters: batchFilters,
         fileType: batchFileType,
       };
 
@@ -84,7 +88,7 @@ const Index = () => {
         toast.error(`Failed to extract EXIF from ${file.name}`);
       }
     }
-  }, [batchFilter, batchFileType]);
+  }, [batchFilters, batchFileType]);
 
   const handleEnhance = useCallback(async (id: string) => {
     const photo = photos.find(p => p.id === id);
@@ -95,7 +99,8 @@ const Index = () => {
       p.id === id ? { ...p, status: 'enhancing' } : p
     ));
 
-    toast.info(`Enhancing with ${photo.selectedFilter} filter...`);
+    const filterNames = photo.selectedFilters.join(' + ');
+    toast.info(`Enhancing with ${filterNames} filter(s)...`);
 
     try {
       // Get original dimensions from raw exif or from the image
@@ -104,20 +109,24 @@ const Index = () => {
       
       let enhancedDataUrl: string;
       
+      // Get custom API keys for rotation
+      const customKeys = getNextKey();
+      
       try {
         enhancedDataUrl = await enhanceImageWithAI(
           photo.originalDataUrl || photo.preview,
-          photo.selectedFilter,
+          photo.selectedFilters,
           photo.rawExif,
           originalWidth,
-          originalHeight
+          originalHeight,
+          customKeys || undefined
         );
       } catch (aiError) {
         console.warn('AI enhancement failed, using local fallback:', aiError);
         toast.info('Using local enhancement...');
         enhancedDataUrl = await enhanceImageLocally(
           photo.originalDataUrl || photo.preview,
-          photo.selectedFilter,
+          photo.selectedFilters,
           photo.rawExif,
           originalWidth,
           originalHeight
@@ -177,7 +186,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos]);
+  }, [photos, getNextKey]);
 
   const handleEnhanceAll = useCallback(async () => {
     const toEnhance = photos.filter(p => p.status === 'uploaded' || p.status === 'ready' || p.status === 'error');
@@ -225,9 +234,9 @@ const Index = () => {
     toast.info('Photo removed');
   }, []);
 
-  const handleFilterChange = useCallback((id: string, filter: FilterType) => {
+  const handleFilterChange = useCallback((id: string, filters: FilterType[]) => {
     setPhotos(prev => prev.map(p => 
-      p.id === id ? { ...p, selectedFilter: filter } : p
+      p.id === id ? { ...p, selectedFilters: filters } : p
     ));
   }, []);
 
@@ -237,9 +246,9 @@ const Index = () => {
     ));
   }, []);
 
-  const handleBatchFilterChange = useCallback((filter: FilterType) => {
-    setBatchFilter(filter);
-    setPhotos(prev => prev.map(p => ({ ...p, selectedFilter: filter })));
+  const handleBatchFilterChange = useCallback((filters: FilterType[]) => {
+    setBatchFilters(filters);
+    setPhotos(prev => prev.map(p => ({ ...p, selectedFilters: filters })));
   }, []);
 
   const handleBatchFileTypeChange = useCallback((fileType: FileType) => {
@@ -265,10 +274,19 @@ const Index = () => {
           />
         </div>
 
+        {/* API Key Manager */}
+        <div className="max-w-2xl mx-auto mb-6">
+          <ApiKeyManager 
+            apiKeys={apiKeys}
+            onAddKey={addKey}
+            onRemoveKey={removeKey}
+          />
+        </div>
+
         <BatchActions
           photoCount={photos.length}
           readyCount={readyCount}
-          selectedFilter={batchFilter}
+          selectedFilters={batchFilters}
           selectedFileType={batchFileType}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}

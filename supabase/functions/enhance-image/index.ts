@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const ALLOWED_FILTERS = ['vibrant', 'cinematic', 'natural', 'default'];
+const ALLOWED_FILTERS = ['vibrant', 'cinematic', 'natural', 'default', 'product', 'sharpener', 'hdr'];
 const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 serve(async (req) => {
@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, filter = 'default', customApiKeys } = await req.json();
+    const { imageBase64, filters = ['default'], customApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -31,7 +31,16 @@ serve(async (req) => {
       });
     }
     
-    const safeFilter = ALLOWED_FILTERS.includes(filter) ? filter : 'default';
+    // Normalize filters input - support both single filter string and array
+    let filterList: string[] = [];
+    if (Array.isArray(filters)) {
+      filterList = filters.filter((f: unknown) => typeof f === 'string' && ALLOWED_FILTERS.includes(f as string));
+    } else if (typeof filters === 'string' && ALLOWED_FILTERS.includes(filters)) {
+      filterList = [filters];
+    }
+    if (filterList.length === 0) {
+      filterList = ['default'];
+    }
     
     // Collect API keys - custom keys first, then Lovable key
     const apiKeys: string[] = [];
@@ -51,14 +60,20 @@ serve(async (req) => {
     }
 
     const filterPrompts: Record<string, string> = {
-      vibrant: "Enhance this photo to make it more vibrant with rich, saturated colors. Increase color intensity while maintaining natural look. Make the image pop with vivid tones.",
-      cinematic: "Apply a cinematic color grade to this photo. Add subtle teal and orange tones, adjust contrast for a movie-like feel. Keep it professional and atmospheric.",
-      natural: "Enhance this photo naturally. Improve exposure, slightly boost colors while maintaining realism. Make it look like a professional photograph taken in ideal lighting conditions.",
-      default: "Enhance this photo professionally. Improve overall quality, adjust exposure, increase color vibrancy while keeping it realistic. Make it look high quality and appealing."
+      vibrant: "Enhance with rich, saturated colors. Increase color intensity while maintaining natural look. Make the image pop with vivid tones.",
+      cinematic: "Apply cinematic color grade with subtle teal and orange tones, adjust contrast for movie-like feel. Keep it professional and atmospheric.",
+      natural: "Enhance naturally. Improve exposure, slightly boost colors while maintaining realism. Professional photograph in ideal lighting conditions.",
+      default: "Enhance professionally. Improve overall quality, adjust exposure, increase color vibrancy while keeping it realistic.",
+      product: "Enhance clarity, increase micro-details, improve color accuracy, reduce noise, and apply studio-style lighting with neutral background separation.",
+      sharpener: "Enhance details significantly. Increase sharpness and micro-contrast for crisp, clear edges throughout the image.",
+      hdr: "Improve dynamic range, recover shadow details, highlight texture, and enhance brightness while keeping the image natural and realistic."
     };
 
-    const prompt = filterPrompts[safeFilter] || filterPrompts.default;
-    console.log(`Processing image with filter: ${safeFilter}, available keys: ${apiKeys.length}`);
+    // Combine prompts from all selected filters
+    const combinedPrompts = filterList.map(f => filterPrompts[f] || filterPrompts.default);
+    const prompt = `Enhance this photo with the following improvements:\n${combinedPrompts.join('\n')}`;
+    
+    console.log(`Processing image with filters: ${filterList.join(', ')}, available keys: ${apiKeys.length}`);
 
     // Try each API key until one works
     let lastError = null;

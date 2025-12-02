@@ -12,7 +12,7 @@ interface PhotoCardProps {
   photo: PhotoFile;
   onEnhance: (id: string) => void;
   onRemove: (id: string) => void;
-  onFilterChange: (id: string, filter: FilterType) => void;
+  onFilterChange: (id: string, filters: FilterType[]) => void;
   onFileTypeChange: (id: string, fileType: FileType) => void;
   isEnhancing: boolean;
 }
@@ -131,10 +131,10 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTy
         </div>
 
         <div className="space-y-2">
-          <span className="text-xs text-muted-foreground">Enhancement Filter:</span>
+          <span className="text-xs text-muted-foreground">Enhancement Filters (select multiple):</span>
           <FilterSelector
-            selected={photo.selectedFilter}
-            onSelect={(filter) => onFilterChange(photo.id, filter)}
+            selected={photo.selectedFilters}
+            onSelect={(filters) => onFilterChange(photo.id, filters)}
             disabled={isEnhancing}
           />
         </div>

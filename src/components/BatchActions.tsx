@@ -7,9 +7,9 @@ import { Sparkles, Download, Loader2 } from 'lucide-react';
 interface BatchActionsProps {
   photoCount: number;
   readyCount: number;
-  selectedFilter: FilterType;
+  selectedFilters: FilterType[];
   selectedFileType: FileType;
-  onFilterChange: (filter: FilterType) => void;
+  onFilterChange: (filters: FilterType[]) => void;
   onFileTypeChange: (fileType: FileType) => void;
   onEnhanceAll: () => void;
   onDownloadAll: () => void;
@@ -19,7 +19,7 @@ interface BatchActionsProps {
 export function BatchActions({
   photoCount,
   readyCount,
-  selectedFilter,
+  selectedFilters,
   selectedFileType,
   onFilterChange,
   onFileTypeChange,
@@ -42,9 +42,9 @@ export function BatchActions({
             />
           </div>
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Batch Filter:</span>
+            <span className="text-xs text-muted-foreground">Batch Filters (select multiple):</span>
             <FilterSelector
-              selected={selectedFilter}
+              selected={selectedFilters}
               onSelect={onFilterChange}
               disabled={isEnhancing}
             />
