@@ -21,10 +21,8 @@ const filters: { id: FilterType; label: string; icon: React.ElementType; descrip
 export function FilterSelector({ selected, onSelect, disabled }: FilterSelectorProps) {
   const handleToggle = (filterId: FilterType) => {
     if (selected.includes(filterId)) {
-      // Remove filter (but keep at least one)
-      if (selected.length > 1) {
-        onSelect(selected.filter(f => f !== filterId));
-      }
+      // Remove filter (allow empty selection for no AI enhancement)
+      onSelect(selected.filter(f => f !== filterId));
     } else {
       // Add filter
       onSelect([...selected, filterId]);
@@ -32,29 +30,36 @@ export function FilterSelector({ selected, onSelect, disabled }: FilterSelectorP
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {filters.map((filter) => {
-        const Icon = filter.icon;
-        const isSelected = selected.includes(filter.id);
-        return (
-          <button
-            key={filter.id}
-            onClick={() => handleToggle(filter.id)}
-            disabled={disabled}
-            title={filter.description}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-              "border disabled:opacity-50 disabled:cursor-not-allowed",
-              isSelected
-                ? "gradient-primary text-primary-foreground border-primary"
-                : "bg-background/50 text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-            )}
-          >
-            <Icon className="w-3 h-3" />
-            {filter.label}
-          </button>
-        );
-      })}
+    <div className="space-y-2">
+      {selected.length === 0 && (
+        <div className="text-xs text-muted-foreground italic">
+          No filters selected — will only upscale to 5MP and embed EXIF data
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {filters.map((filter) => {
+          const Icon = filter.icon;
+          const isSelected = selected.includes(filter.id);
+          return (
+            <button
+              key={filter.id}
+              onClick={() => handleToggle(filter.id)}
+              disabled={disabled}
+              title={filter.description}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                "border disabled:opacity-50 disabled:cursor-not-allowed",
+                isSelected
+                  ? "gradient-primary text-primary-foreground border-primary"
+                  : "bg-background/50 text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+              )}
+            >
+              <Icon className="w-3 h-3" />
+              {filter.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
