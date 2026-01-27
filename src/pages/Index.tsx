@@ -99,8 +99,9 @@ const Index = () => {
       p.id === id ? { ...p, status: 'enhancing' } : p
     ));
 
-    const filterNames = photo.selectedFilters.join(' + ');
-    toast.info(`Enhancing with ${filterNames} filter(s)...`);
+    const hasFilters = photo.selectedFilters.length > 0;
+    const filterNames = hasFilters ? photo.selectedFilters.join(' + ') : 'None (upscale + EXIF only)';
+    toast.info(`Processing with filters: ${filterNames}`);
 
     try {
       // Get original dimensions from raw exif or from the image
@@ -109,24 +110,36 @@ const Index = () => {
       
       let enhancedDataUrl: string;
       
-      // Get custom API keys for rotation
-      const customKeys = getNextKey();
-      
-      try {
-        enhancedDataUrl = await enhanceImageWithAI(
-          photo.originalDataUrl || photo.preview,
-          photo.selectedFilters,
-          photo.rawExif,
-          originalWidth,
-          originalHeight,
-          customKeys || undefined
-        );
-      } catch (aiError) {
-        console.warn('AI enhancement failed, using local fallback:', aiError);
-        toast.info('Using local enhancement...');
+      if (hasFilters) {
+        // Get custom API keys for rotation
+        const customKeys = getNextKey();
+        
+        try {
+          enhancedDataUrl = await enhanceImageWithAI(
+            photo.originalDataUrl || photo.preview,
+            photo.selectedFilters,
+            photo.rawExif,
+            originalWidth,
+            originalHeight,
+            customKeys || undefined
+          );
+        } catch (aiError) {
+          console.warn('AI enhancement failed, using local fallback:', aiError);
+          toast.info('Using local enhancement...');
+          enhancedDataUrl = await enhanceImageLocally(
+            photo.originalDataUrl || photo.preview,
+            photo.selectedFilters,
+            photo.rawExif,
+            originalWidth,
+            originalHeight
+          );
+        }
+      } else {
+        // No filters selected - just upscale and embed EXIF (skip AI enhancement)
+        toast.info('Upscaling and embedding EXIF data...');
         enhancedDataUrl = await enhanceImageLocally(
           photo.originalDataUrl || photo.preview,
-          photo.selectedFilters,
+          [], // Empty filters for no color adjustments
           photo.rawExif,
           originalWidth,
           originalHeight
