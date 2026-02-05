@@ -292,7 +292,8 @@ const Index = () => {
         {/* API Key Manager */}
         <div className="max-w-2xl mx-auto mb-6">
           <ApiKeyManager 
-            apiKeys={apiKeys}
+            geminiKeys={getKeys('gemini')}
+            openaiKeys={getKeys('openai')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />
