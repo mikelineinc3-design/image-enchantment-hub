@@ -155,11 +155,13 @@ const Index = () => {
       
       toast.info('Generating microstock metadata...');
       
-      // Generate metadata
+      // Generate metadata with OpenAI keys if available
+      const allKeys = getAllKeys();
       try {
         const metadata = await generateMicrostockMetadata(
           enhancedDataUrl,
-          photo.fileType
+          photo.fileType,
+          allKeys.openai.length > 0 ? allKeys.openai : undefined
         );
         
         // Embed IPTC/XMP metadata into the enhanced image for Shutterstock compatibility
