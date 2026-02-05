@@ -111,8 +111,8 @@ const Index = () => {
       let enhancedDataUrl: string;
       
       if (hasFilters) {
-        // Get custom API keys for rotation
-        const customKeys = getNextKey();
+        // Get all API keys for rotation
+        const allKeys = getAllKeys();
         
         try {
           enhancedDataUrl = await enhanceImageWithAI(
