@@ -24,7 +24,7 @@ const Index = () => {
   const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
   
-  const { apiKeys, addKey, removeKey, getNextKey } = useApiKeys();
+  const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
 
   const currentStep = photos.length === 0 ? 1 : 
     photos.some(p => p.status === 'ready') ? 4 :
