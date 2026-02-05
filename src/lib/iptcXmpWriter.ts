@@ -148,20 +148,26 @@ export function embedXmpIntoJpeg(jpegDataUrl: string, xmpData: IptcXmpData): str
   }
 }
 
-// Sanitize title for microstock (max 195 chars, no special chars)
+// Sanitize title for microstock (max 195 chars, only letters, numbers, spaces, commas, periods, hyphens)
 export function sanitizeTitle(title: string): string {
   return title
-    .replace(/[^\w\s,.-]/g, '') // Remove special characters
+    .replace(/[^a-zA-Z0-9\s,.\-]/g, '') // Only allow alphanumeric, spaces, commas, periods, hyphens
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
     .slice(0, 195);
 }
 
-// Sanitize keywords (max 45 keywords)
+// Sanitize keywords (max 45 keywords, only letters, numbers, spaces, hyphens - NO special characters)
 export function sanitizeKeywords(keywords: string): string[] {
   return keywords
     .split(',')
-    .map(k => k.trim().toLowerCase().replace(/[^\w\s-]/g, ''))
-    .filter(k => k.length > 0)
+    .map(k => k
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s\-]/g, '') // Only allow lowercase letters, numbers, spaces, hyphens
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim()
+    )
+    .filter(k => k.length > 0 && k.length <= 50) // Filter empty and overly long keywords
     .slice(0, 45);
 }
