@@ -121,7 +121,7 @@ const Index = () => {
             photo.rawExif,
             originalWidth,
             originalHeight,
-            customKeys || undefined
+            allKeys.gemini.length > 0 ? allKeys.gemini : undefined
           );
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
