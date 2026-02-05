@@ -24,7 +24,7 @@ const Index = () => {
   const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
   
-  const { apiKeys, addKey, removeKey, getNextKey } = useApiKeys();
+  const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
 
   const currentStep = photos.length === 0 ? 1 : 
     photos.some(p => p.status === 'ready') ? 4 :
@@ -111,8 +111,8 @@ const Index = () => {
       let enhancedDataUrl: string;
       
       if (hasFilters) {
-        // Get custom API keys for rotation
-        const customKeys = getNextKey();
+        // Get all API keys for rotation
+        const allKeys = getAllKeys();
         
         try {
           enhancedDataUrl = await enhanceImageWithAI(
@@ -121,7 +121,7 @@ const Index = () => {
             photo.rawExif,
             originalWidth,
             originalHeight,
-            customKeys || undefined
+            allKeys.gemini.length > 0 ? allKeys.gemini : undefined
           );
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
@@ -155,11 +155,13 @@ const Index = () => {
       
       toast.info('Generating microstock metadata...');
       
-      // Generate metadata
+      // Generate metadata with OpenAI keys if available
+      const allKeys = getAllKeys();
       try {
         const metadata = await generateMicrostockMetadata(
           enhancedDataUrl,
-          photo.fileType
+          photo.fileType,
+          allKeys.openai.length > 0 ? allKeys.openai : undefined
         );
         
         // Embed IPTC/XMP metadata into the enhanced image for Shutterstock compatibility
@@ -199,7 +201,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getNextKey]);
+  }, [photos, getAllKeys]);
 
   const handleEnhanceAll = useCallback(async () => {
     const toEnhance = photos.filter(p => p.status === 'uploaded' || p.status === 'ready' || p.status === 'error');
@@ -290,7 +292,8 @@ const Index = () => {
         {/* API Key Manager */}
         <div className="max-w-2xl mx-auto mb-6">
           <ApiKeyManager 
-            apiKeys={apiKeys}
+            geminiKeys={getKeys('gemini')}
+            openaiKeys={getKeys('openai')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />

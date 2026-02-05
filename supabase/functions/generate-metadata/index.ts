@@ -8,6 +8,11 @@ const corsHeaders = {
 const ALLOWED_FILE_TYPES = ['jpg', 'png', 'eps', 'svg'];
 const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
+interface ApiKeyEntry {
+  key: string;
+  type: 'lovable' | 'openai';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -33,14 +38,22 @@ serve(async (req) => {
     
     const safeFileType = ALLOWED_FILE_TYPES.includes(fileType) ? fileType : 'jpg';
     
-    // Collect API keys
-    const apiKeys: string[] = [];
+    // Collect API keys with their types
+    const apiKeys: ApiKeyEntry[] = [];
+    
+    // Add custom OpenAI keys first (user-provided)
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      apiKeys.push(...customApiKeys.filter((k: unknown) => typeof k === 'string' && (k as string).length > 20));
+      for (const k of customApiKeys) {
+        if (typeof k === 'string' && k.length > 20) {
+          apiKeys.push({ key: k, type: 'openai' });
+        }
+      }
     }
+    
+    // Add Lovable API key as fallback
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (LOVABLE_API_KEY) {
-      apiKeys.push(LOVABLE_API_KEY);
+      apiKeys.push({ key: LOVABLE_API_KEY, type: 'lovable' });
     }
     
     if (apiKeys.length === 0) {
@@ -82,30 +95,58 @@ RESPOND IN EXACT JSON FORMAT:
     // Try each API key
     let lastError = null;
     for (let i = 0; i < apiKeys.length; i++) {
-      const apiKey = apiKeys[i];
+      const { key: apiKey, type: keyType } = apiKeys[i];
       try {
-        console.log(`Trying API key ${i + 1}/${apiKeys.length}`);
+        console.log(`Trying ${keyType} API key ${i + 1}/${apiKeys.length}`);
         
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: systemPrompt },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
-                  { type: "image_url", image_url: { url: imageBase64 } }
-                ]
-              }
-            ]
-          }),
-        });
+        let response: Response;
+        
+        if (keyType === 'openai') {
+          // Direct OpenAI API call
+          response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "gpt-4o-mini",
+              messages: [
+                { role: "system", content: systemPrompt },
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
+                    { type: "image_url", image_url: { url: imageBase64 } }
+                  ]
+                }
+              ],
+              max_tokens: 1000
+            }),
+          });
+        } else {
+          // Lovable AI Gateway
+          response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [
+                { role: "system", content: systemPrompt },
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
+                    { type: "image_url", image_url: { url: imageBase64 } }
+                  ]
+                }
+              ]
+            }),
+          });
+        }
 
         if (response.status === 429) {
           console.log('Rate limited, trying next key...');
@@ -116,6 +157,12 @@ RESPOND IN EXACT JSON FORMAT:
         if (response.status === 402) {
           console.log('Payment required, trying next key...');
           lastError = new Error('Payment required');
+          continue;
+        }
+
+        if (response.status === 401) {
+          console.log('Invalid API key, trying next key...');
+          lastError = new Error('Invalid API key');
           continue;
         }
 
@@ -158,7 +205,7 @@ RESPOND IN EXACT JSON FORMAT:
           .slice(0, 45)
           .join(', ');
 
-        console.log("Metadata generated successfully");
+        console.log(`Metadata generated successfully using ${keyType} API`);
         return new Response(JSON.stringify({
           filename: metadata.filename || `image.${safeFileType}`,
           title: sanitizedTitle,
@@ -169,7 +216,7 @@ RESPOND IN EXACT JSON FORMAT:
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (error) {
-        console.error('Error with API key:', error);
+        console.error(`Error with ${keyType} API key:`, error);
         lastError = error;
       }
     }
