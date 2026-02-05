@@ -201,7 +201,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getNextKey]);
+  }, [photos, getAllKeys]);
 
   const handleEnhanceAll = useCallback(async () => {
     const toEnhance = photos.filter(p => p.status === 'uploaded' || p.status === 'ready' || p.status === 'error');
