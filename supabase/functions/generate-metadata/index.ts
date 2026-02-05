@@ -190,18 +190,18 @@ RESPOND IN EXACT JSON FORMAT:
 
         const metadata = JSON.parse(jsonMatch[0]);
         
-        // Sanitize title (max 195 chars, no special characters)
+        // Sanitize title (max 195 chars, only alphanumeric + spaces, commas, periods, hyphens)
         const sanitizedTitle = (metadata.title || '')
-          .replace(/[^\w\s,.-]/g, '')
+          .replace(/[^a-zA-Z0-9\s,.\-]/g, '') // Strict: only letters, numbers, basic punctuation
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 195);
         
-        // Sanitize keywords (max 45)
+        // Sanitize keywords (max 45, only lowercase alphanumeric + spaces, hyphens - NO special chars)
         const sanitizedKeywords = (metadata.keywords || '')
           .split(',')
-          .map((k: string) => k.trim().toLowerCase().replace(/[^\w\s-]/g, ''))
-          .filter((k: string) => k.length > 0)
+          .map((k: string) => k.trim().toLowerCase().replace(/[^a-z0-9\s\-]/g, '').replace(/\s+/g, ' ').trim())
+          .filter((k: string) => k.length > 0 && k.length <= 50)
           .slice(0, 45)
           .join(', ');
 
