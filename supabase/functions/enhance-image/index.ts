@@ -146,14 +146,19 @@ serve(async (req) => {
           continue;
         }
 
-        // If original was PNG and we need to preserve format, convert JPEG result back to PNG
-        // Note: The AI might return JPEG, so we need to handle this on client side
-        // Here we just pass the format info back
-        console.log("Image enhanced successfully");
+        // Validate the enhanced image URL format
+        if (!enhancedImageUrl.startsWith('data:image/')) {
+          console.error("Invalid enhanced image format returned");
+          lastError = new Error("Invalid enhanced image format");
+          continue;
+        }
+
+        console.log(`Image enhanced successfully. Original: ${isPng ? 'PNG' : 'JPEG'}, Result format: ${enhancedImageUrl.substring(0, 30)}...`);
         return new Response(JSON.stringify({ 
           enhancedImage: enhancedImageUrl,
           message: data.choices?.[0]?.message?.content || "Image enhanced successfully",
-          originalFormat: isPng ? 'png' : 'jpeg'
+          originalFormat: isPng ? 'png' : 'jpeg',
+          preserveFormat: preserveFormat
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
