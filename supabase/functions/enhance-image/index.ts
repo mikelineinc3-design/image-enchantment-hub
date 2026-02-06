@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, filters = ['default'], customApiKeys } = await req.json();
+    const { imageBase64, filters = ['default'], customApiKeys, preserveFormat = false } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -30,6 +30,9 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
+    
+    // Detect if image is PNG
+    const isPng = imageBase64.startsWith('data:image/png');
     
     // Normalize filters input - support both single filter string and array
     let filterList: string[] = [];
@@ -71,9 +74,14 @@ serve(async (req) => {
 
     // Combine prompts from all selected filters
     const combinedPrompts = filterList.map(f => filterPrompts[f] || filterPrompts.default);
-    const prompt = `Enhance this photo with the following improvements:\n${combinedPrompts.join('\n')}`;
     
-    console.log(`Processing image with filters: ${filterList.join(', ')}, available keys: ${apiKeys.length}`);
+    // Add PNG-specific instructions if preserving format
+    let prompt = `Enhance this photo with the following improvements:\n${combinedPrompts.join('\n')}`;
+    if (isPng && preserveFormat) {
+      prompt += '\n\nIMPORTANT: This is a PNG image. Preserve any transparency in the image. Do not add a background to transparent areas.';
+    }
+    
+    console.log(`Processing ${isPng ? 'PNG' : 'JPEG'} image with filters: ${filterList.join(', ')}, available keys: ${apiKeys.length}`);
 
     // Try each API key until one works
     let lastError = null;
@@ -130,7 +138,7 @@ serve(async (req) => {
         }
 
         const data = await response.json();
-        const enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        let enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
         
         if (!enhancedImageUrl) {
           console.error("No image in response");
@@ -138,10 +146,14 @@ serve(async (req) => {
           continue;
         }
 
+        // If original was PNG and we need to preserve format, convert JPEG result back to PNG
+        // Note: The AI might return JPEG, so we need to handle this on client side
+        // Here we just pass the format info back
         console.log("Image enhanced successfully");
         return new Response(JSON.stringify({ 
           enhancedImage: enhancedImageUrl,
-          message: data.choices?.[0]?.message?.content || "Image enhanced successfully"
+          message: data.choices?.[0]?.message?.content || "Image enhanced successfully",
+          originalFormat: isPng ? 'png' : 'jpeg'
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

@@ -1,5 +1,6 @@
 export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural' | 'product' | 'sharpener' | 'hdr';
 export type FileType = 'jpg' | 'png' | 'eps' | 'svg';
+export type ImageFormat = 'jpeg' | 'png';
 
 export interface ExifData {
   make?: string;
@@ -61,4 +62,5 @@ export interface PhotoFile {
   selectedFilters: FilterType[];
   fileType: FileType;
   metadata?: MicrostockMetadata;
+  imageFormat: ImageFormat; // Track original format (jpeg or png)
 }
