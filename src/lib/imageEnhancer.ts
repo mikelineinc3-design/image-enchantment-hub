@@ -148,25 +148,38 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
       canvas.width = targetWidth;
       canvas.height = targetHeight;
       const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // For PNG, don't fill background - preserve transparency
-        if (format === 'png') {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-        
-        // Use correct format
-        const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-        const quality = format === 'png' ? undefined : 0.95;
-        resolve(canvas.toDataURL(mimeType, quality));
-      } else {
+      if (!ctx) {
         reject(new Error('Failed to get canvas context'));
+        return;
       }
+      
+      // For PNG, don't fill background - preserve transparency
+      if (format === 'png') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      
+      // Use blob conversion to avoid base64 chunking issues
+      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+      const quality = format === 'png' ? undefined : 0.95;
+      
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Failed to convert to blob'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.onerror = () => reject(new Error('Failed to read blob'));
+        reader.readAsDataURL(blob);
+      }, mimeType, quality);
     };
-    img.onerror = reject;
+    img.onerror = () => reject(new Error('Failed to load image for resize'));
     img.src = dataUrl;
   });
 }
