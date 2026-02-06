@@ -65,12 +65,14 @@ export async function enhanceImageWithAI(
   // Calculate target dimensions (at least 5MP)
   const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
   
+  const isPng = imageFormat === 'png';
+  
   const { data, error } = await supabase.functions.invoke('enhance-image', {
     body: { 
       imageBase64: imageDataUrl, 
       filters,
       customApiKeys,
-      preserveFormat: imageFormat === 'png' // Tell edge function to preserve PNG format
+      preserveFormat: isPng // Tell edge function to preserve PNG format
     }
   });
 
@@ -85,16 +87,56 @@ export async function enhanceImageWithAI(
 
   let enhancedDataUrl = data.enhancedImage;
   
+  // If original was PNG but AI returned JPEG, convert back to PNG
+  if (isPng && enhancedDataUrl && !enhancedDataUrl.startsWith('data:image/png')) {
+    enhancedDataUrl = await convertJpegToPng(enhancedDataUrl);
+  }
+  
   // Resize to target dimensions (at least 5MP), preserving format
   enhancedDataUrl = await resizeToTarget(enhancedDataUrl, targetWidth, targetHeight, imageFormat);
   
   // Only embed EXIF for JPEG (PNG doesn't support EXIF the same way)
-  if (imageFormat === 'jpeg') {
+  if (!isPng) {
     const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
     enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
   }
   
   return enhancedDataUrl;
+}
+
+// Convert JPEG data URL to PNG data URL
+async function convertJpegToPng(jpegDataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      
+      // Convert to PNG using blob to avoid base64 issues
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Failed to convert to PNG blob'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.onerror = () => reject(new Error('Failed to read PNG blob'));
+        reader.readAsDataURL(blob);
+      }, 'image/png');
+    };
+    img.onerror = () => reject(new Error('Failed to load image for PNG conversion'));
+    img.src = jpegDataUrl;
+  });
 }
 
 // Resize image to target dimensions, preserving format
@@ -106,25 +148,38 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
       canvas.width = targetWidth;
       canvas.height = targetHeight;
       const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // For PNG, don't fill background - preserve transparency
-        if (format === 'png') {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-        
-        // Use correct format
-        const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-        const quality = format === 'png' ? undefined : 0.95;
-        resolve(canvas.toDataURL(mimeType, quality));
-      } else {
+      if (!ctx) {
         reject(new Error('Failed to get canvas context'));
+        return;
       }
+      
+      // For PNG, don't fill background - preserve transparency
+      if (format === 'png') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      
+      // Use blob conversion to avoid base64 chunking issues
+      const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+      const quality = format === 'png' ? undefined : 0.95;
+      
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Failed to convert to blob'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.onerror = () => reject(new Error('Failed to read blob'));
+        reader.readAsDataURL(blob);
+      }, mimeType, quality);
     };
-    img.onerror = reject;
+    img.onerror = () => reject(new Error('Failed to load image for resize'));
     img.src = dataUrl;
   });
 }
