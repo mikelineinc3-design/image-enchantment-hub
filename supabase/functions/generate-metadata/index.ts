@@ -36,6 +36,16 @@ serve(async (req) => {
       });
     }
     
+    // Validate base64 format - must be a valid data URL
+    const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,/);
+    if (!dataUrlMatch) {
+      console.error('Invalid image data URL format');
+      return new Response(JSON.stringify({ error: 'Invalid image format' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
     const safeFileType = ALLOWED_FILE_TYPES.includes(fileType) ? fileType : 'jpg';
     
     // Collect API keys with their types

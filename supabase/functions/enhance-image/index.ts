@@ -78,10 +78,10 @@ serve(async (req) => {
     // Add PNG-specific instructions if preserving format
     let prompt = `Enhance this photo with the following improvements:\n${combinedPrompts.join('\n')}`;
     if (isPng && preserveFormat) {
-      prompt += '\n\nIMPORTANT: This is a PNG image. Preserve any transparency in the image. Do not add a background to transparent areas.';
+      prompt += '\n\nCRITICAL: This is a PNG image with potential transparency. You MUST preserve any transparent areas exactly as they are. Do NOT add any background color to transparent regions. Keep the alpha channel intact.';
     }
     
-    console.log(`Processing ${isPng ? 'PNG' : 'JPEG'} image with filters: ${filterList.join(', ')}, available keys: ${apiKeys.length}`);
+    console.log(`Processing ${isPng ? 'PNG' : 'JPEG'} image with filters: ${filterList.join(', ')}, preserve format: ${preserveFormat}, available keys: ${apiKeys.length}`);
 
     // Try each API key until one works
     let lastError = null;
