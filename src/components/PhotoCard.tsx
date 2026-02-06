@@ -40,14 +40,21 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTy
     
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    const filename = photo.metadata?.filename || `${photo.file.name.replace(/\.[^/.]+$/, '')}_enhanced.jpg`;
+    
+    // Use correct extension based on image format
+    const ext = photo.imageFormat === 'png' ? 'png' : 'jpg';
+    const baseName = photo.metadata?.filename?.replace(/\.[^/.]+$/, '') || 
+      photo.file.name.replace(/\.[^/.]+$/, '') + '_enhanced';
+    const filename = `${baseName}.${ext}`;
+    
     link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
     
-    toast.success('Photo downloaded with embedded EXIF data!');
+    const metadataNote = photo.imageFormat === 'png' ? '' : ' with embedded EXIF data';
+    toast.success(`Photo downloaded${metadataNote}!`);
   };
 
   const statusIcon = {
