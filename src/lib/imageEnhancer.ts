@@ -1,6 +1,6 @@
-import { FilterType, RawExifData } from '@/types/photo';
+import { FilterType, RawExifData, ImageFormat } from '@/types/photo';
 import { supabase } from '@/integrations/supabase/client';
-import { embedExifIntoJpeg, CameraExifData, generateDefaultCameraExif } from './exifWriter';
+import { embedExifIntoJpeg } from './exifWriter';
 import { generateRawExif } from './exif';
 import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from './iptcXmpWriter';
 
@@ -22,12 +22,44 @@ function calculateMinimumDimensions(width: number, height: number): { targetWidt
   return { targetWidth, targetHeight };
 }
 
+// Detect if image has transparency (PNG with alpha)
+async function hasTransparency(dataUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(img.width, 100); // Sample small area
+      canvas.height = Math.min(img.height, 100);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(false);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      // Check alpha channel for any transparency
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] < 255) {
+          resolve(true);
+          return;
+        }
+      }
+      resolve(false);
+    };
+    img.onerror = () => resolve(false);
+    img.src = dataUrl;
+  });
+}
+
 export async function enhanceImageWithAI(
   imageDataUrl: string,
   filters: FilterType[],
   rawExif: RawExifData,
   originalWidth: number,
   originalHeight: number,
+  imageFormat: ImageFormat,
   customApiKeys?: string[]
 ): Promise<string> {
   // Calculate target dimensions (at least 5MP)
@@ -37,7 +69,8 @@ export async function enhanceImageWithAI(
     body: { 
       imageBase64: imageDataUrl, 
       filters,
-      customApiKeys
+      customApiKeys,
+      preserveFormat: imageFormat === 'png' // Tell edge function to preserve PNG format
     }
   });
 
@@ -52,18 +85,20 @@ export async function enhanceImageWithAI(
 
   let enhancedDataUrl = data.enhancedImage;
   
-  // Resize to target dimensions (at least 5MP)
-  enhancedDataUrl = await resizeToTarget(enhancedDataUrl, targetWidth, targetHeight);
+  // Resize to target dimensions (at least 5MP), preserving format
+  enhancedDataUrl = await resizeToTarget(enhancedDataUrl, targetWidth, targetHeight, imageFormat);
   
-  // Embed EXIF data
-  const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
-  enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+  // Only embed EXIF for JPEG (PNG doesn't support EXIF the same way)
+  if (imageFormat === 'jpeg') {
+    const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+    enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+  }
   
   return enhancedDataUrl;
 }
 
-// Resize image to target dimensions
-async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight: number): Promise<string> {
+// Resize image to target dimensions, preserving format
+async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight: number, format: ImageFormat): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -72,10 +107,19 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
       canvas.height = targetHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
+        // For PNG, don't fill background - preserve transparency
+        if (format === 'png') {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-        resolve(canvas.toDataURL('image/jpeg', 0.95));
+        
+        // Use correct format
+        const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+        const quality = format === 'png' ? undefined : 0.95;
+        resolve(canvas.toDataURL(mimeType, quality));
       } else {
         reject(new Error('Failed to get canvas context'));
       }
@@ -90,8 +134,14 @@ export function embedIptcXmpMetadata(
   dataUrl: string, 
   title: string, 
   description: string, 
-  keywords: string
+  keywords: string,
+  format: ImageFormat
 ): string {
+  // Only embed IPTC/XMP in JPEG files - PNG uses different metadata format
+  if (format === 'png') {
+    return dataUrl; // Return as-is for PNG
+  }
+  
   const xmpData: IptcXmpData = {
     title: sanitizeTitle(title),
     description: sanitizeTitle(description),
@@ -109,7 +159,8 @@ export async function enhanceImageLocally(
   filters: FilterType[],
   rawExif: RawExifData,
   originalWidth: number,
-  originalHeight: number
+  originalHeight: number,
+  imageFormat: ImageFormat
 ): Promise<string> {
   // Calculate target dimensions (at least 5MP)
   const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
@@ -124,6 +175,11 @@ export async function enhanceImageLocally(
       canvas.height = targetHeight;
       
       if (ctx) {
+        // For PNG, clear canvas first to preserve transparency
+        if (imageFormat === 'png') {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
@@ -137,6 +193,11 @@ export async function enhanceImageLocally(
           const combinedSettings = getCombinedFilterSettings(filters);
           
           for (let i = 0; i < data.length; i += 4) {
+            // Skip fully transparent pixels for PNG
+            if (imageFormat === 'png' && data[i + 3] === 0) {
+              continue;
+            }
+            
             data[i] = Math.min(255, Math.max(0, combinedSettings.contrast * (data[i] - 128) + 128));
             data[i + 1] = Math.min(255, Math.max(0, combinedSettings.contrast * (data[i + 1] - 128) + 128));
             data[i + 2] = Math.min(255, Math.max(0, combinedSettings.contrast * (data[i + 2] - 128) + 128));
@@ -166,7 +227,6 @@ export async function enhanceImageLocally(
           
           ctx.putImageData(imageData, 0, 0);
         }
-        // If no filters, just upscale without color adjustments
       }
       resolve();
     };
@@ -174,9 +234,16 @@ export async function enhanceImageLocally(
     img.src = imageDataUrl;
   });
 
-  let enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-  const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
-  enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+  // Use correct format
+  const mimeType = imageFormat === 'png' ? 'image/png' : 'image/jpeg';
+  const quality = imageFormat === 'png' ? undefined : 0.95;
+  let enhancedDataUrl = canvas.toDataURL(mimeType, quality);
+  
+  // Only embed EXIF for JPEG
+  if (imageFormat === 'jpeg') {
+    const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+    enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+  }
   
   return enhancedDataUrl;
 }
@@ -218,4 +285,19 @@ function getCombinedFilterSettings(filters: FilterType[]) {
     contrast: totalContrast / filters.length,
     saturation: totalSaturation / filters.length
   };
+}
+
+// Detect image format from file or data URL
+export function detectImageFormat(file: File): ImageFormat {
+  if (file.type === 'image/png') {
+    return 'png';
+  }
+  return 'jpeg';
+}
+
+export function detectFormatFromDataUrl(dataUrl: string): ImageFormat {
+  if (dataUrl.startsWith('data:image/png')) {
+    return 'png';
+  }
+  return 'jpeg';
 }

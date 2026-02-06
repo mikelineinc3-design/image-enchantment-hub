@@ -1,13 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { PhotoUploader } from '@/components/PhotoUploader';
 import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
-import { PhotoFile, FilterType, FileType } from '@/types/photo';
+import { PhotoFile, FilterType, FileType, ImageFormat } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
-import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata } from '@/lib/imageEnhancer';
+import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { useApiKeys } from '@/hooks/useApiKeys';
@@ -17,12 +17,17 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
+// Batch processing configuration
+const BATCH_SIZE = 3; // Process 3 images at a time
+const BATCH_DELAY = 500; // 500ms delay between batches
+
 const Index = () => {
   const [photos, setPhotos] = useState<PhotoFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
   const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
+  const processingRef = useRef<boolean>(false);
   
   const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
 
@@ -38,70 +43,80 @@ const Index = () => {
       return;
     }
 
-    for (const file of imageFiles) {
-      const id = generateId();
-      const preview = URL.createObjectURL(file);
-      
-      const newPhoto: PhotoFile = {
-        id,
-        file,
-        preview,
-        originalDataUrl: '',
-        originalExif: {},
-        rawExif: {},
-        enhancedExif: {},
-        status: 'extracting',
-        selectedFilters: batchFilters,
-        fileType: batchFileType,
-      };
-
-      setPhotos(prev => [...prev, newPhoto]);
-      toast.success(`${file.name} uploaded`);
-
-      try {
-        const [exifResult, dataUrl] = await Promise.all([
-          extractExif(file),
-          fileToDataUrl(file)
-        ]);
-        
-        const enhanced = generateAiExif(exifResult.display);
-        
-        setPhotos(prev => prev.map(p => 
-          p.id === id 
-            ? { 
-                ...p, 
-                originalExif: exifResult.display, 
-                rawExif: exifResult.raw,
-                enhancedExif: enhanced, 
-                originalDataUrl: dataUrl,
-                status: 'uploaded' 
-              }
-            : p
-        ));
-        toast.success(`EXIF extracted from ${file.name}`);
-      } catch (error) {
-        setPhotos(prev => prev.map(p => 
-          p.id === id 
-            ? { ...p, status: 'error', error: 'Failed to extract EXIF' }
-            : p
-        ));
-        toast.error(`Failed to extract EXIF from ${file.name}`);
-      }
+    // Process uploads in parallel batches
+    const uploadBatches: File[][] = [];
+    for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
+      uploadBatches.push(imageFiles.slice(i, i + BATCH_SIZE));
     }
+
+    for (const batch of uploadBatches) {
+      await Promise.all(batch.map(async (file) => {
+        const id = generateId();
+        const preview = URL.createObjectURL(file);
+        const imageFormat = detectImageFormat(file);
+        
+        const newPhoto: PhotoFile = {
+          id,
+          file,
+          preview,
+          originalDataUrl: '',
+          originalExif: {},
+          rawExif: {},
+          enhancedExif: {},
+          status: 'extracting',
+          selectedFilters: batchFilters,
+          fileType: batchFileType,
+          imageFormat,
+        };
+
+        setPhotos(prev => [...prev, newPhoto]);
+
+        try {
+          const [exifResult, dataUrl] = await Promise.all([
+            extractExif(file),
+            fileToDataUrl(file)
+          ]);
+          
+          const enhanced = generateAiExif(exifResult.display);
+          
+          setPhotos(prev => prev.map(p => 
+            p.id === id 
+              ? { 
+                  ...p, 
+                  originalExif: exifResult.display, 
+                  rawExif: exifResult.raw,
+                  enhancedExif: enhanced, 
+                  originalDataUrl: dataUrl,
+                  status: 'uploaded' 
+                }
+              : p
+          ));
+        } catch (error) {
+          setPhotos(prev => prev.map(p => 
+            p.id === id 
+              ? { ...p, status: 'error', error: 'Failed to extract EXIF' }
+              : p
+          ));
+        }
+      }));
+    }
+    
+    toast.success(`${imageFiles.length} photos uploaded`);
   }, [batchFilters, batchFileType]);
 
-  const handleEnhance = useCallback(async (id: string) => {
+  const handleEnhance = useCallback(async (id: string): Promise<boolean> => {
     const photo = photos.find(p => p.id === id);
-    if (!photo || photo.status === 'enhancing' || photo.status === 'generating-metadata') return;
+    if (!photo || photo.status === 'enhancing' || photo.status === 'generating-metadata') {
+      return false;
+    }
 
     setEnhancingIds(prev => new Set(prev).add(id));
     setPhotos(prev => prev.map(p => 
-      p.id === id ? { ...p, status: 'enhancing' } : p
+      p.id === id ? { ...p, status: 'enhancing', error: undefined } : p
     ));
 
     const hasFilters = photo.selectedFilters.length > 0;
-    const filterNames = hasFilters ? photo.selectedFilters.join(' + ') : 'None (upscale + EXIF only)';
-    toast.info(`Processing with filters: ${filterNames}`);
+    const isPng = photo.imageFormat === 'png';
 
     try {
       // Get original dimensions from raw exif or from the image
@@ -121,28 +136,29 @@ const Index = () => {
             photo.rawExif,
             originalWidth,
             originalHeight,
+            photo.imageFormat,
             allKeys.gemini.length > 0 ? allKeys.gemini : undefined
           );
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
-          toast.info('Using local enhancement...');
           enhancedDataUrl = await enhanceImageLocally(
             photo.originalDataUrl || photo.preview,
             photo.selectedFilters,
             photo.rawExif,
             originalWidth,
-            originalHeight
+            originalHeight,
+            photo.imageFormat
           );
         }
       } else {
         // No filters selected - just upscale and embed EXIF (skip AI enhancement)
-        toast.info('Upscaling and embedding EXIF data...');
         enhancedDataUrl = await enhanceImageLocally(
           photo.originalDataUrl || photo.preview,
           [], // Empty filters for no color adjustments
           photo.rawExif,
           originalWidth,
-          originalHeight
+          originalHeight,
+          photo.imageFormat
         );
       }
       
@@ -153,9 +169,7 @@ const Index = () => {
           : p
       ));
       
-      toast.info('Generating microstock metadata...');
-      
-      // Generate metadata with OpenAI keys if available
+      // Generate metadata with OpenAI keys if available (with retry)
       const allKeys = getAllKeys();
       try {
         const metadata = await generateMicrostockMetadata(
@@ -164,12 +178,13 @@ const Index = () => {
           allKeys.openai.length > 0 ? allKeys.openai : undefined
         );
         
-        // Embed IPTC/XMP metadata into the enhanced image for Shutterstock compatibility
+        // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
         const finalEnhancedImage = embedIptcXmpMetadata(
           enhancedDataUrl,
           metadata.title,
           metadata.description,
-          metadata.keywords
+          metadata.keywords,
+          photo.imageFormat
         );
         
         setPhotos(prev => prev.map(p => 
@@ -178,22 +193,23 @@ const Index = () => {
             : p
         ));
         
-        toast.success('Image enhanced with EXIF & IPTC/XMP metadata!');
+        return true;
       } catch (metadataError) {
         console.warn('Metadata generation failed:', metadataError);
+        // Still mark as ready but without metadata
         setPhotos(prev => prev.map(p => 
           p.id === id 
             ? { ...p, status: 'ready' }
             : p
         ));
-        toast.success('Image enhanced! Metadata generation failed.');
+        return true; // Enhancement succeeded even if metadata failed
       }
     } catch (error) {
       console.error('Enhancement error:', error);
       setPhotos(prev => prev.map(p => 
         p.id === id ? { ...p, status: 'error', error: 'Enhancement failed' } : p
       ));
-      toast.error('Failed to enhance image');
+      return false;
     } finally {
       setEnhancingIds(prev => {
         const next = new Set(prev);
@@ -204,20 +220,60 @@ const Index = () => {
   }, [photos, getAllKeys]);
 
   const handleEnhanceAll = useCallback(async () => {
-    const toEnhance = photos.filter(p => p.status === 'uploaded' || p.status === 'ready' || p.status === 'error');
+    if (processingRef.current) {
+      toast.info('Batch processing already in progress');
+      return;
+    }
+
+    const toEnhance = photos.filter(p => p.status === 'uploaded' || p.status === 'error');
     
     if (toEnhance.length === 0) {
       toast.info('No photos to enhance');
       return;
     }
 
-    toast.info(`Starting batch enhancement of ${toEnhance.length} photos...`);
+    processingRef.current = true;
+    toast.info(`Starting batch enhancement of ${toEnhance.length} photos (${BATCH_SIZE} at a time)...`);
     
-    for (const photo of toEnhance) {
-      await handleEnhance(photo.id);
+    let successCount = 0;
+    let failCount = 0;
+    
+    // Process in batches
+    const batches: PhotoFile[][] = [];
+    for (let i = 0; i < toEnhance.length; i += BATCH_SIZE) {
+      batches.push(toEnhance.slice(i, i + BATCH_SIZE));
     }
     
-    toast.success('Batch enhancement complete!');
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      toast.info(`Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} photos)...`);
+      
+      // Process batch in parallel
+      const results = await Promise.allSettled(
+        batch.map(photo => handleEnhance(photo.id))
+      );
+      
+      results.forEach(result => {
+        if (result.status === 'fulfilled' && result.value) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      });
+      
+      // Small delay between batches to prevent overwhelming the API
+      if (batchIndex < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+      }
+    }
+    
+    processingRef.current = false;
+    
+    if (failCount > 0) {
+      toast.warning(`Batch complete: ${successCount} enhanced, ${failCount} failed`);
+    } else {
+      toast.success(`All ${successCount} photos enhanced successfully!`);
+    }
   }, [photos, handleEnhance]);
 
   const handleDownloadAll = useCallback(async () => {
@@ -272,7 +328,7 @@ const Index = () => {
   }, []);
 
   const readyCount = photos.filter(p => p.status === 'ready').length;
-  const isEnhancing = enhancingIds.size > 0;
+  const isEnhancing = enhancingIds.size > 0 || processingRef.current;
 
   return (
     <div className="min-h-screen bg-background">
