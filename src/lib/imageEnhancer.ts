@@ -6,18 +6,37 @@ import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from '
 
 // Minimum 5 megapixels = 5,000,000 pixels
 const MIN_MEGAPIXELS = 5000000;
+// Maximum dimensions to prevent memory issues (10MP max)
+const MAX_MEGAPIXELS = 10000000;
+const MAX_DIMENSION = 4000; // Max width or height
 
 function calculateMinimumDimensions(width: number, height: number): { targetWidth: number; targetHeight: number } {
   const currentPixels = width * height;
   
+  // If already meets minimum, use original dimensions (up to max)
   if (currentPixels >= MIN_MEGAPIXELS) {
+    // Cap at max dimensions to prevent memory issues
+    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+      const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+      return { 
+        targetWidth: Math.floor(width * scale), 
+        targetHeight: Math.floor(height * scale) 
+      };
+    }
     return { targetWidth: width, targetHeight: height };
   }
   
-  // Scale up to meet minimum 5MP
+  // Scale up to meet minimum 5MP, but cap at max
   const scale = Math.sqrt(MIN_MEGAPIXELS / currentPixels);
-  const targetWidth = Math.ceil(width * scale);
-  const targetHeight = Math.ceil(height * scale);
+  let targetWidth = Math.ceil(width * scale);
+  let targetHeight = Math.ceil(height * scale);
+  
+  // Cap dimensions to prevent memory issues
+  if (targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
+    const capScale = Math.min(MAX_DIMENSION / targetWidth, MAX_DIMENSION / targetHeight);
+    targetWidth = Math.floor(targetWidth * capScale);
+    targetHeight = Math.floor(targetHeight * capScale);
+  }
   
   return { targetWidth, targetHeight };
 }
