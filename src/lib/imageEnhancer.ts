@@ -160,7 +160,14 @@ async function convertJpegToPng(jpegDataUrl: string): Promise<string> {
 // Resize image to target dimensions, preserving format
 async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight: number, format: ImageFormat): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Validate input data URL
+    if (!dataUrl || dataUrl.length < 100 || !dataUrl.startsWith('data:image/')) {
+      reject(new Error(`Invalid data URL for resize: ${dataUrl?.substring(0, 50) || 'empty'}`));
+      return;
+    }
+    
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = targetWidth;
