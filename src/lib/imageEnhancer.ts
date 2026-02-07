@@ -359,37 +359,68 @@ export async function enhanceImageLocally(
         const mimeType = imageFormat === 'png' ? 'image/png' : 'image/jpeg';
         const quality = imageFormat === 'png' ? undefined : 0.95;
         
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error('Failed to convert canvas to blob'));
+        // Helper function to process the data URL result
+        const processResult = (enhancedDataUrl: string) => {
+          // Validate result
+          if (!enhancedDataUrl || !enhancedDataUrl.startsWith('data:image/')) {
+            reject(new Error('Local enhancement produced invalid result'));
             return;
           }
           
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            let enhancedDataUrl = reader.result as string;
-            
-            // Validate result
-            if (!enhancedDataUrl || !enhancedDataUrl.startsWith('data:image/')) {
-              reject(new Error('Local enhancement produced invalid result'));
+          // Only embed EXIF for JPEG
+          if (imageFormat === 'jpeg') {
+            try {
+              const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+              enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+            } catch (exifError) {
+              console.warn('Failed to embed EXIF, continuing without it:', exifError);
+            }
+          }
+          
+          resolve(enhancedDataUrl);
+        };
+        
+        // Try blob conversion first, fall back to toDataURL if it fails
+        try {
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              // Fallback to toDataURL if toBlob returns null
+              console.warn('toBlob returned null, falling back to toDataURL');
+              try {
+                const fallbackDataUrl = canvas.toDataURL(mimeType, quality);
+                processResult(fallbackDataUrl);
+              } catch (fallbackError) {
+                reject(new Error(`Canvas export failed: ${fallbackError}`));
+              }
               return;
             }
             
-            // Only embed EXIF for JPEG
-            if (imageFormat === 'jpeg') {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              processResult(reader.result as string);
+            };
+            reader.onerror = () => {
+              // Fallback to toDataURL if FileReader fails
+              console.warn('FileReader failed, falling back to toDataURL');
               try {
-                const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
-                enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
-              } catch (exifError) {
-                console.warn('Failed to embed EXIF, continuing without it:', exifError);
+                const fallbackDataUrl = canvas.toDataURL(mimeType, quality);
+                processResult(fallbackDataUrl);
+              } catch (fallbackError) {
+                reject(new Error(`Canvas export failed: ${fallbackError}`));
               }
-            }
-            
-            resolve(enhancedDataUrl);
-          };
-          reader.onerror = () => reject(new Error('Failed to read enhanced image blob'));
-          reader.readAsDataURL(blob);
-        }, mimeType, quality);
+            };
+            reader.readAsDataURL(blob);
+          }, mimeType, quality);
+        } catch (blobError) {
+          // If toBlob throws, fall back to toDataURL
+          console.warn('toBlob threw error, falling back to toDataURL:', blobError);
+          try {
+            const fallbackDataUrl = canvas.toDataURL(mimeType, quality);
+            processResult(fallbackDataUrl);
+          } catch (fallbackError) {
+            reject(new Error(`Canvas export failed: ${fallbackError}`));
+          }
+        }
       } catch (err) {
         reject(new Error(`Local enhancement error: ${err}`));
       }
