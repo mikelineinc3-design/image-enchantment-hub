@@ -117,11 +117,23 @@ const Index = () => {
 
     const hasFilters = photo.selectedFilters.length > 0;
     const isPng = photo.imageFormat === 'png';
-
-    try {
-      // Get original dimensions from raw exif or from the image
-      const originalWidth = photo.rawExif.width || photo.originalExif.width || 0;
-      const originalHeight = photo.rawExif.height || photo.originalExif.height || 0;
+    
+    // Validate we have a proper data URL to work with
+    const sourceDataUrl = photo.originalDataUrl || photo.preview;
+    if (!sourceDataUrl || sourceDataUrl.length < 100) {
+      console.error('No valid source image data URL for enhancement');
+      setPhotos(prev => prev.map(p => 
+        p.id === id ? { ...p, status: 'error', error: 'Invalid image data' } : p
+      ));
+      setEnhancingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      return false;
+    }
+    
+    console.log(`Starting enhancement for ${id}: format=${photo.imageFormat}, dataUrl length=${sourceDataUrl.length}`);
       
       let enhancedDataUrl: string;
       
