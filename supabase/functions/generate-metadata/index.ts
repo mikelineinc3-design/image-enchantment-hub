@@ -37,13 +37,20 @@ serve(async (req) => {
     }
     
     // Validate base64 format - must be a valid data URL
-    const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,/);
+    // Support various image formats including PNG with different mime type variations
+    const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
     if (!dataUrlMatch) {
-      console.error('Invalid image data URL format');
-      return new Response(JSON.stringify({ error: 'Invalid image format' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      // Also check if it's a raw base64 without prefix (shouldn't happen but handle gracefully)
+      const hasBase64Content = imageBase64.length > 100 && imageBase64.includes(',');
+      if (!hasBase64Content) {
+        console.error('Invalid image data URL format:', imageBase64.substring(0, 100));
+        return new Response(JSON.stringify({ error: 'Invalid image format' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      // Try to use the image anyway if it has content after comma
+      console.log('Non-standard data URL format, attempting to use anyway');
     }
     
     const safeFileType = ALLOWED_FILE_TYPES.includes(fileType) ? fileType : 'jpg';

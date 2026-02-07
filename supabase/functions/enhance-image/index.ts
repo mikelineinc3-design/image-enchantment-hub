@@ -31,8 +31,18 @@ serve(async (req) => {
       });
     }
     
+    // Validate base64 format - must be a valid data URL
+    const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
+    if (!dataUrlMatch) {
+      console.error('Invalid image data URL format:', imageBase64.substring(0, 100));
+      return new Response(JSON.stringify({ error: 'Invalid image format' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
     // Detect if image is PNG
-    const isPng = imageBase64.startsWith('data:image/png');
+    const isPng = imageBase64.toLowerCase().startsWith('data:image/png') || imageBase64.toLowerCase().startsWith('data:image/x-png');
     
     // Normalize filters input - support both single filter string and array
     let filterList: string[] = [];

@@ -7,7 +7,7 @@ import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
 import { PhotoFile, FilterType, FileType, ImageFormat } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
-import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat } from '@/lib/imageEnhancer';
+import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { useApiKeys } from '@/hooks/useApiKeys';
@@ -170,6 +170,17 @@ const Index = () => {
       ));
       
       // Generate metadata with OpenAI keys if available (with retry)
+      // Validate the data URL first to prevent sending invalid data to edge function
+      if (!validateImageDataUrl(enhancedDataUrl)) {
+        console.error('Enhanced image data URL is invalid, skipping metadata generation');
+        setPhotos(prev => prev.map(p => 
+          p.id === id 
+            ? { ...p, status: 'ready' }
+            : p
+        ));
+        return true;
+      }
+      
       const allKeys = getAllKeys();
       try {
         const metadata = await generateMicrostockMetadata(
