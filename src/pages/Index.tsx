@@ -170,6 +170,17 @@ const Index = () => {
       ));
       
       // Generate metadata with OpenAI keys if available (with retry)
+      // Validate the data URL first to prevent sending invalid data to edge function
+      if (!validateImageDataUrl(enhancedDataUrl)) {
+        console.error('Enhanced image data URL is invalid, skipping metadata generation');
+        setPhotos(prev => prev.map(p => 
+          p.id === id 
+            ? { ...p, status: 'ready' }
+            : p
+        ));
+        return true;
+      }
+      
       const allKeys = getAllKeys();
       try {
         const metadata = await generateMicrostockMetadata(

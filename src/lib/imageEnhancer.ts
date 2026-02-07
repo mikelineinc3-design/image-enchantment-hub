@@ -198,7 +198,13 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
         }
         const reader = new FileReader();
         reader.onloadend = () => {
-          resolve(reader.result as string);
+          const result = reader.result as string;
+          // Validate the result is a proper data URL
+          if (!result || !result.startsWith('data:image/')) {
+            reject(new Error('Resize produced invalid result'));
+            return;
+          }
+          resolve(result);
         };
         reader.onerror = () => reject(new Error('Failed to read blob'));
         reader.readAsDataURL(blob);
@@ -207,6 +213,17 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
     img.onerror = () => reject(new Error('Failed to load image for resize'));
     img.src = dataUrl;
   });
+}
+
+// Validate that a data URL is properly formatted for API calls
+export function validateImageDataUrl(dataUrl: string): boolean {
+  if (!dataUrl || typeof dataUrl !== 'string') return false;
+  if (dataUrl.length < 100) return false;
+  if (!dataUrl.startsWith('data:image/')) return false;
+  if (!dataUrl.includes(',')) return false;
+  // Check that there's actual content after the comma
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex > 0 && dataUrl.length - commaIndex > 50;
 }
 
 // Embed IPTC/XMP metadata for microstock compatibility
