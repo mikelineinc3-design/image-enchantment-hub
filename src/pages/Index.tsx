@@ -7,7 +7,7 @@ import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
 import { PhotoFile, FilterType, FileType, ImageFormat } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
-import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat } from '@/lib/imageEnhancer';
+import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { useApiKeys } from '@/hooks/useApiKeys';
