@@ -107,32 +107,50 @@ export async function enhanceImageWithAI(
 // Convert JPEG data URL to PNG data URL
 async function convertJpegToPng(jpegDataUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Validate input
+    if (!jpegDataUrl || jpegDataUrl.length < 100) {
+      reject(new Error('Invalid JPEG data URL for PNG conversion'));
+      return;
+    }
+    
     const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Failed to get canvas context'));
-        return;
-      }
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      
-      // Convert to PNG using blob to avoid base64 issues
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error('Failed to convert to PNG blob'));
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
           return;
         }
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve(reader.result as string);
-        };
-        reader.onerror = () => reject(new Error('Failed to read PNG blob'));
-        reader.readAsDataURL(blob);
-      }, 'image/png');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        
+        // Convert to PNG using blob to avoid base64 issues
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Failed to convert to PNG blob'));
+            return;
+          }
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            // Validate the result
+            if (!result || !result.startsWith('data:image/png')) {
+              reject(new Error('PNG conversion produced invalid result'));
+              return;
+            }
+            resolve(result);
+          };
+          reader.onerror = () => reject(new Error('Failed to read PNG blob'));
+          reader.readAsDataURL(blob);
+        }, 'image/png');
+      } catch (err) {
+        reject(new Error(`PNG conversion error: ${err}`));
+      }
     };
     img.onerror = () => reject(new Error('Failed to load image for PNG conversion'));
     img.src = jpegDataUrl;
