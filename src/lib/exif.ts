@@ -159,12 +159,26 @@ export const exifLabels: Record<string, string> = {
   gpsLongitude: 'GPS Longitude',
 };
 
-// Convert file to data URL
+// Convert file to data URL with validation
 export function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (!file || file.size === 0) {
+      reject(new Error('Invalid or empty file'));
+      return;
+    }
+    
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Validate the result is a proper data URL
+      if (!result || !result.startsWith('data:image/') || result.length < 100) {
+        reject(new Error('File conversion produced invalid data URL'));
+        return;
+      }
+      console.log(`Converted ${file.name} to data URL (${result.length} chars, format: ${result.substring(0, 30)}...)`);
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
     reader.readAsDataURL(file);
   });
 }

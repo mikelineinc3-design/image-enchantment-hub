@@ -117,6 +117,23 @@ const Index = () => {
 
     const hasFilters = photo.selectedFilters.length > 0;
     const isPng = photo.imageFormat === 'png';
+    
+    // Validate we have a proper data URL to work with
+    const sourceDataUrl = photo.originalDataUrl || photo.preview;
+    if (!sourceDataUrl || sourceDataUrl.length < 100) {
+      console.error('No valid source image data URL for enhancement');
+      setPhotos(prev => prev.map(p => 
+        p.id === id ? { ...p, status: 'error', error: 'Invalid image data' } : p
+      ));
+      setEnhancingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      return false;
+    }
+    
+    console.log(`Starting enhancement for ${id}: format=${photo.imageFormat}, dataUrl length=${sourceDataUrl.length}`);
 
     try {
       // Get original dimensions from raw exif or from the image
@@ -131,7 +148,7 @@ const Index = () => {
         
         try {
           enhancedDataUrl = await enhanceImageWithAI(
-            photo.originalDataUrl || photo.preview,
+            sourceDataUrl,
             photo.selectedFilters,
             photo.rawExif,
             originalWidth,
@@ -142,7 +159,7 @@ const Index = () => {
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
           enhancedDataUrl = await enhanceImageLocally(
-            photo.originalDataUrl || photo.preview,
+            sourceDataUrl,
             photo.selectedFilters,
             photo.rawExif,
             originalWidth,
@@ -153,7 +170,7 @@ const Index = () => {
       } else {
         // No filters selected - just upscale and embed EXIF (skip AI enhancement)
         enhancedDataUrl = await enhanceImageLocally(
-          photo.originalDataUrl || photo.preview,
+          sourceDataUrl,
           [], // Empty filters for no color adjustments
           photo.rawExif,
           originalWidth,

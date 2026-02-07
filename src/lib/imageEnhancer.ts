@@ -259,19 +259,30 @@ export async function enhanceImageLocally(
   originalHeight: number,
   imageFormat: ImageFormat
 ): Promise<string> {
+  // Validate input
+  if (!imageDataUrl || imageDataUrl.length < 50) {
+    throw new Error('Invalid image data URL for local enhancement');
+  }
+  
   // Calculate target dimensions (at least 5MP)
   const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
   
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  
-  await new Promise<void>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
     img.onload = () => {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      
-      if (ctx) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        
         // For PNG, clear canvas first to preserve transparency
         if (imageFormat === 'png') {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -324,25 +335,50 @@ export async function enhanceImageLocally(
           
           ctx.putImageData(imageData, 0, 0);
         }
+        
+        // Use blob conversion to avoid base64 chunking issues with large images
+        const mimeType = imageFormat === 'png' ? 'image/png' : 'image/jpeg';
+        const quality = imageFormat === 'png' ? undefined : 0.95;
+        
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Failed to convert canvas to blob'));
+            return;
+          }
+          
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            let enhancedDataUrl = reader.result as string;
+            
+            // Validate result
+            if (!enhancedDataUrl || !enhancedDataUrl.startsWith('data:image/')) {
+              reject(new Error('Local enhancement produced invalid result'));
+              return;
+            }
+            
+            // Only embed EXIF for JPEG
+            if (imageFormat === 'jpeg') {
+              try {
+                const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+                enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+              } catch (exifError) {
+                console.warn('Failed to embed EXIF, continuing without it:', exifError);
+              }
+            }
+            
+            resolve(enhancedDataUrl);
+          };
+          reader.onerror = () => reject(new Error('Failed to read enhanced image blob'));
+          reader.readAsDataURL(blob);
+        }, mimeType, quality);
+      } catch (err) {
+        reject(new Error(`Local enhancement error: ${err}`));
       }
-      resolve();
     };
-    img.onerror = reject;
+    
+    img.onerror = () => reject(new Error('Failed to load image for local enhancement'));
     img.src = imageDataUrl;
   });
-
-  // Use correct format
-  const mimeType = imageFormat === 'png' ? 'image/png' : 'image/jpeg';
-  const quality = imageFormat === 'png' ? undefined : 0.95;
-  let enhancedDataUrl = canvas.toDataURL(mimeType, quality);
-  
-  // Only embed EXIF for JPEG
-  if (imageFormat === 'jpeg') {
-    const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
-    enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
-  }
-  
-  return enhancedDataUrl;
 }
 
 function getFilterSettings(filter: FilterType) {
