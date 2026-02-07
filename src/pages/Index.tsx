@@ -134,6 +134,11 @@ const Index = () => {
     }
     
     console.log(`Starting enhancement for ${id}: format=${photo.imageFormat}, dataUrl length=${sourceDataUrl.length}`);
+
+    try {
+      // Get original dimensions from raw exif or from the image
+      const originalWidth = photo.rawExif.width || photo.originalExif.width || 0;
+      const originalHeight = photo.rawExif.height || photo.originalExif.height || 0;
       
       let enhancedDataUrl: string;
       
@@ -143,7 +148,7 @@ const Index = () => {
         
         try {
           enhancedDataUrl = await enhanceImageWithAI(
-            photo.originalDataUrl || photo.preview,
+            sourceDataUrl,
             photo.selectedFilters,
             photo.rawExif,
             originalWidth,
@@ -154,7 +159,7 @@ const Index = () => {
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
           enhancedDataUrl = await enhanceImageLocally(
-            photo.originalDataUrl || photo.preview,
+            sourceDataUrl,
             photo.selectedFilters,
             photo.rawExif,
             originalWidth,
@@ -165,7 +170,7 @@ const Index = () => {
       } else {
         // No filters selected - just upscale and embed EXIF (skip AI enhancement)
         enhancedDataUrl = await enhanceImageLocally(
-          photo.originalDataUrl || photo.preview,
+          sourceDataUrl,
           [], // Empty filters for no color adjustments
           photo.rawExif,
           originalWidth,
