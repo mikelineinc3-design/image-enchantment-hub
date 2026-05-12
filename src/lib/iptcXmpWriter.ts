@@ -124,7 +124,7 @@ export function embedXmpIntoJpeg(jpegDataUrl: string, xmpData: IptcXmpData): str
     const segmentLength = 2 + xmpHeader.length + xmpBytes.length;
     
     // Find position to insert
-    const insertPos = findApp1Position(imageData);
+    const insertPos = findXmpInsertPosition(imageData);
     
     // Build new image
     const newImage = new Uint8Array(imageData.length + 4 + segmentLength);
