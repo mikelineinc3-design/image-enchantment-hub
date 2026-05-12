@@ -61,7 +61,12 @@ serve(async (req) => {
     // Add custom OpenAI keys first (user-provided)
     if (customApiKeys && Array.isArray(customApiKeys)) {
       for (const k of customApiKeys) {
-        if (typeof k === 'string' && k.length > 20) {
+        if (
+          typeof k === 'string' &&
+          k.length >= 20 &&
+          k.length <= 200 &&
+          /^[A-Za-z0-9_\-]+$/.test(k)
+        ) {
           apiKeys.push({ key: k, type: 'openai' });
         }
       }
