@@ -58,7 +58,15 @@ serve(async (req) => {
     // Collect API keys - custom keys first, then Lovable key
     const apiKeys: string[] = [];
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      apiKeys.push(...customApiKeys.filter((k: unknown) => typeof k === 'string' && (k as string).length > 20));
+      apiKeys.push(
+        ...customApiKeys.filter(
+          (k: unknown) =>
+            typeof k === 'string' &&
+            (k as string).length >= 20 &&
+            (k as string).length <= 200 &&
+            /^[A-Za-z0-9_\-]+$/.test(k as string)
+        )
+      );
     }
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (LOVABLE_API_KEY) {
