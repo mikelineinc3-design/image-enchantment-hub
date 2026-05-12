@@ -82,19 +82,26 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Find APP1 marker position in JPEG
-function findApp1Position(data: Uint8Array): number {
+// Find position to insert XMP APP1 segment.
+// IMPORTANT: must come AFTER any existing EXIF APP1, so EXIF readers that only
+// read the first APP1 segment still see the EXIF block intact.
+function findXmpInsertPosition(data: Uint8Array): number {
   let pos = 2; // Skip SOI marker (0xFFD8)
   while (pos < data.length - 4) {
     if (data[pos] !== 0xFF) break;
     const marker = data[pos + 1];
-    if (marker === 0xE1) return pos; // APP1 found
-    if (marker === 0xDA) return pos; // SOS - insert before this
-    if (marker === 0xD9) return pos; // EOI
+    // Stop at SOS (start of scan) or EOI - insert before image data
+    if (marker === 0xDA || marker === 0xD9) return pos;
+    // Standalone markers without length payload
+    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+      pos += 2;
+      continue;
+    }
     const length = (data[pos + 2] << 8) | data[pos + 3];
+    // Skip past this segment (including any existing APP1/EXIF) so XMP lands after it
     pos += 2 + length;
   }
-  return 2; // Default: right after SOI
+  return pos;
 }
 
 // Embed XMP into JPEG
@@ -117,7 +124,7 @@ export function embedXmpIntoJpeg(jpegDataUrl: string, xmpData: IptcXmpData): str
     const segmentLength = 2 + xmpHeader.length + xmpBytes.length;
     
     // Find position to insert
-    const insertPos = findApp1Position(imageData);
+    const insertPos = findXmpInsertPosition(imageData);
     
     // Build new image
     const newImage = new Uint8Array(imageData.length + 4 + segmentLength);
