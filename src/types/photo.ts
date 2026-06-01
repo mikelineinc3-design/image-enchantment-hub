@@ -47,6 +47,7 @@ export interface MicrostockMetadata {
   keywords: string;
   adobeCategory: string;
   shutterstockCategory: string;
+  aiTrainingNote?: string;
 }
 
 export interface PhotoFile {
