@@ -209,7 +209,9 @@ const Index = () => {
         const metadata = await generateMicrostockMetadata(
           enhancedDataUrl,
           photo.fileType,
-          allKeys.openai.length > 0 ? allKeys.openai : undefined
+          allKeys.openai.length > 0 ? allKeys.openai : undefined,
+          metadataMode,
+          customPrompt
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
