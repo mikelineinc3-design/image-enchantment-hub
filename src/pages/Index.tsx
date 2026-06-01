@@ -5,7 +5,7 @@ import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
-import { PhotoFile, FilterType, FileType, ImageFormat } from '@/types/photo';
+import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
