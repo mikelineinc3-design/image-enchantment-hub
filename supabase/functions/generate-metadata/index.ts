@@ -256,7 +256,8 @@ RESPOND IN EXACT JSON FORMAT:
           title: sanitizedTitle,
           keywords: sanitizedKeywords,
           adobeCategory: metadata.adobeCategory || 'Lifestyle',
-          shutterstockCategory: metadata.shutterstockCategory || 'Miscellaneous'
+          shutterstockCategory: metadata.shutterstockCategory || 'Miscellaneous',
+          aiTrainingNote: typeof metadata.aiTrainingNote === 'string' ? metadata.aiTrainingNote.slice(0, 1000) : undefined
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
