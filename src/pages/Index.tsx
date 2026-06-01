@@ -396,8 +396,14 @@ const Index = () => {
           readyCount={readyCount}
           selectedFilters={batchFilters}
           selectedFileType={batchFileType}
+          upscaleEnabled={upscaleEnabled}
+          metadataMode={metadataMode}
+          customPrompt={customPrompt}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}
+          onUpscaleChange={setUpscaleEnabled}
+          onMetadataModeChange={setMetadataMode}
+          onCustomPromptChange={setCustomPrompt}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
           isEnhancing={isEnhancing}
