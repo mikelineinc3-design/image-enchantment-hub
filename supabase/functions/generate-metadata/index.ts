@@ -90,7 +90,25 @@ serve(async (req) => {
       ? "This is a VECTOR file (EPS/SVG). Include keywords like 'vector', 'eps', 'illustration', 'clipart', 'graphic design'."
       : "This is a PHOTO/RASTER file (JPG/PNG). NEVER use keywords like 'vector', 'eps', 'illustration', or 'clipart'.";
 
-    const systemPrompt = `You are an expert microstock metadata generator for Adobe Stock and Shutterstock.
+    const dataModePrompt = `Act as an expert Shutterstock Contributor SEO manager. Analyze this uploaded image and provide the following for Shutterstock metadata:
+
+Title/Description: Write a clear, descriptive, and literal title (under 200 characters). Focus on exactly what is happening, the subject's action, the setting, and light conditions. Avoid poetic or metaphorical words.
+
+Keywords (Tags): Provide 40-50 highly relevant keywords separated by commas. Include literal objects, background details, color tones, emotional states/expressions, camera angles (e.g., close-up, top-view), and specific use-cases (e.g., AI training data, computer vision, machine learning datasets).
+
+AI Training Value Note: Briefly explain what specific AI models (like object detection, emotion recognition, or texture mapping) can learn from this image.
+
+RESPOND IN EXACT JSON FORMAT:
+{
+  "filename": "suggested-filename.${safeFileType}",
+  "title": "Literal descriptive title under 200 chars",
+  "keywords": "keyword1, keyword2, ... (40-50 keywords)",
+  "adobeCategory": "Category Name",
+  "shutterstockCategory": "Category Name",
+  "aiTrainingNote": "Brief AI training value note"
+}`;
+
+    const defaultPrompt = `You are an expert microstock metadata generator for Adobe Stock and Shutterstock.
 
 ${fileTypeContext}
 
@@ -111,6 +129,11 @@ RESPOND IN EXACT JSON FORMAT:
   "adobeCategory": "Category Name",
   "shutterstockCategory": "Category Name"
 }`;
+
+    let systemPrompt = mode === 'data' ? dataModePrompt : defaultPrompt;
+    if (typeof customPrompt === 'string' && customPrompt.trim().length > 0 && customPrompt.length < 4000) {
+      systemPrompt += `\n\nADDITIONAL USER INSTRUCTIONS (apply to title and keywords):\n${customPrompt.trim()}`;
+    }
 
     console.log(`Generating metadata for ${safeFileType}, available keys: ${apiKeys.length}`);
 
