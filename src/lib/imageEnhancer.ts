@@ -10,12 +10,20 @@ const MIN_MEGAPIXELS = 5000000;
 const MAX_MEGAPIXELS = 10000000;
 const MAX_DIMENSION = 4000; // Max width or height
 
-function calculateMinimumDimensions(width: number, height: number): { targetWidth: number; targetHeight: number } {
+function calculateMinimumDimensions(width: number, height: number, upscale: boolean = true): { targetWidth: number; targetHeight: number } {
   const currentPixels = width * height;
+  
+  // If upscale is disabled, keep original dimensions (just cap at MAX_DIMENSION)
+  if (!upscale) {
+    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+      const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+      return { targetWidth: Math.floor(width * scale), targetHeight: Math.floor(height * scale) };
+    }
+    return { targetWidth: width, targetHeight: height };
+  }
   
   // If already meets minimum, use original dimensions (up to max)
   if (currentPixels >= MIN_MEGAPIXELS) {
-    // Cap at max dimensions to prevent memory issues
     if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
       const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
       return { 
@@ -31,7 +39,6 @@ function calculateMinimumDimensions(width: number, height: number): { targetWidt
   let targetWidth = Math.ceil(width * scale);
   let targetHeight = Math.ceil(height * scale);
   
-  // Cap dimensions to prevent memory issues
   if (targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
     const capScale = Math.min(MAX_DIMENSION / targetWidth, MAX_DIMENSION / targetHeight);
     targetWidth = Math.floor(targetWidth * capScale);
@@ -79,10 +86,11 @@ export async function enhanceImageWithAI(
   originalWidth: number,
   originalHeight: number,
   imageFormat: ImageFormat,
-  customApiKeys?: string[]
+  customApiKeys?: string[],
+  upscale: boolean = true
 ): Promise<string> {
-  // Calculate target dimensions (at least 5MP)
-  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
+  // Calculate target dimensions
+  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
   
   const isPng = imageFormat === 'png';
   
@@ -276,15 +284,16 @@ export async function enhanceImageLocally(
   rawExif: RawExifData,
   originalWidth: number,
   originalHeight: number,
-  imageFormat: ImageFormat
+  imageFormat: ImageFormat,
+  upscale: boolean = true
 ): Promise<string> {
   // Validate input
   if (!imageDataUrl || imageDataUrl.length < 50) {
     throw new Error('Invalid image data URL for local enhancement');
   }
   
-  // Calculate target dimensions (at least 5MP)
-  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
+  // Calculate target dimensions
+  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
   
   return new Promise((resolve, reject) => {
     const img = new Image();

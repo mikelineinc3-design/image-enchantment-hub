@@ -5,7 +5,7 @@ import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
-import { PhotoFile, FilterType, FileType, ImageFormat } from '@/types/photo';
+import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
@@ -27,6 +27,9 @@ const Index = () => {
   const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
   const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
+  const [upscaleEnabled, setUpscaleEnabled] = useState<boolean>(true);
+  const [metadataMode, setMetadataMode] = useState<MetadataMode>('default');
+  const [customPrompt, setCustomPrompt] = useState<string>('');
   const processingRef = useRef<boolean>(false);
   
   const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
@@ -154,7 +157,8 @@ const Index = () => {
             originalWidth,
             originalHeight,
             photo.imageFormat,
-            allKeys.gemini.length > 0 ? allKeys.gemini : undefined
+            allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
+            upscaleEnabled
           );
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
@@ -164,18 +168,20 @@ const Index = () => {
             photo.rawExif,
             originalWidth,
             originalHeight,
-            photo.imageFormat
+            photo.imageFormat,
+            upscaleEnabled
           );
         }
       } else {
-        // No filters selected - just upscale and embed EXIF (skip AI enhancement)
+        // No filters selected - just upscale (if on) and embed EXIF (skip AI enhancement)
         enhancedDataUrl = await enhanceImageLocally(
           sourceDataUrl,
-          [], // Empty filters for no color adjustments
+          [],
           photo.rawExif,
           originalWidth,
           originalHeight,
-          photo.imageFormat
+          photo.imageFormat,
+          upscaleEnabled
         );
       }
       
@@ -203,7 +209,9 @@ const Index = () => {
         const metadata = await generateMicrostockMetadata(
           enhancedDataUrl,
           photo.fileType,
-          allKeys.openai.length > 0 ? allKeys.openai : undefined
+          allKeys.openai.length > 0 ? allKeys.openai : undefined,
+          metadataMode,
+          customPrompt
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
@@ -245,7 +253,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getAllKeys]);
+  }, [photos, getAllKeys, upscaleEnabled, metadataMode, customPrompt]);
 
   const handleEnhanceAll = useCallback(async () => {
     if (processingRef.current) {
@@ -388,8 +396,14 @@ const Index = () => {
           readyCount={readyCount}
           selectedFilters={batchFilters}
           selectedFileType={batchFileType}
+          upscaleEnabled={upscaleEnabled}
+          metadataMode={metadataMode}
+          customPrompt={customPrompt}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}
+          onUpscaleChange={setUpscaleEnabled}
+          onMetadataModeChange={setMetadataMode}
+          onCustomPromptChange={setCustomPrompt}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
           isEnhancing={isEnhancing}

@@ -1,6 +1,7 @@
 export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural' | 'product' | 'sharpener' | 'hdr';
 export type FileType = 'jpg' | 'png' | 'eps' | 'svg';
 export type ImageFormat = 'jpeg' | 'png';
+export type MetadataMode = 'default' | 'data';
 
 export interface ExifData {
   make?: string;
@@ -46,6 +47,7 @@ export interface MicrostockMetadata {
   keywords: string;
   adobeCategory: string;
   shutterstockCategory: string;
+  aiTrainingNote?: string;
 }
 
 export interface PhotoFile {
