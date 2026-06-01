@@ -284,15 +284,16 @@ export async function enhanceImageLocally(
   rawExif: RawExifData,
   originalWidth: number,
   originalHeight: number,
-  imageFormat: ImageFormat
+  imageFormat: ImageFormat,
+  upscale: boolean = true
 ): Promise<string> {
   // Validate input
   if (!imageDataUrl || imageDataUrl.length < 50) {
     throw new Error('Invalid image data URL for local enhancement');
   }
   
-  // Calculate target dimensions (at least 5MP)
-  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
+  // Calculate target dimensions
+  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
   
   return new Promise((resolve, reject) => {
     const img = new Image();
