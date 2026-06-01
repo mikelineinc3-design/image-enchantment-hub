@@ -253,7 +253,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getAllKeys]);
+  }, [photos, getAllKeys, upscaleEnabled, metadataMode, customPrompt]);
 
   const handleEnhanceAll = useCallback(async () => {
     if (processingRef.current) {
