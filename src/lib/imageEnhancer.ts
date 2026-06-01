@@ -86,10 +86,11 @@ export async function enhanceImageWithAI(
   originalWidth: number,
   originalHeight: number,
   imageFormat: ImageFormat,
-  customApiKeys?: string[]
+  customApiKeys?: string[],
+  upscale: boolean = true
 ): Promise<string> {
-  // Calculate target dimensions (at least 5MP)
-  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight);
+  // Calculate target dimensions
+  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
   
   const isPng = imageFormat === 'png';
   
