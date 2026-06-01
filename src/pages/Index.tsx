@@ -27,6 +27,9 @@ const Index = () => {
   const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
   const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
+  const [upscaleEnabled, setUpscaleEnabled] = useState<boolean>(true);
+  const [metadataMode, setMetadataMode] = useState<MetadataMode>('default');
+  const [customPrompt, setCustomPrompt] = useState<string>('');
   const processingRef = useRef<boolean>(false);
   
   const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
