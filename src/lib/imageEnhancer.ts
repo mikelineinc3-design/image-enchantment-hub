@@ -386,6 +386,8 @@ export async function enhanceImageLocally(
           if (imageFormat === 'jpeg') {
             try {
               const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+              // Canvas baked in EXIF rotation; reset orientation so viewers don't double-rotate.
+              completeRawExif.orientation = 1;
               enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
             } catch (exifError) {
               console.warn('Failed to embed EXIF, continuing without it:', exifError);
