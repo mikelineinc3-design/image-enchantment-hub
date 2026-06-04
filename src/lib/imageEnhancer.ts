@@ -125,6 +125,9 @@ export async function enhanceImageWithAI(
   // Only embed EXIF for JPEG (PNG doesn't support EXIF the same way)
   if (!isPng) {
     const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+    // Canvas has already baked in any EXIF rotation, so force orientation = 1
+    // to prevent viewers from rotating the pixels a second time.
+    completeRawExif.orientation = 1;
     enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
   }
   
@@ -292,15 +295,18 @@ export async function enhanceImageLocally(
     throw new Error('Invalid image data URL for local enhancement');
   }
   
-  // Calculate target dimensions
-  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
-  
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     
     img.onload = () => {
       try {
+        // Use the browser-rotated (orientation-baked) natural dimensions so
+        // portrait images with EXIF orientation don't get drawn into a
+        // landscape canvas (which caused the rotation bug).
+        const sourceWidth = img.naturalWidth || originalWidth;
+        const sourceHeight = img.naturalHeight || originalHeight;
+        const { targetWidth, targetHeight } = calculateMinimumDimensions(sourceWidth, sourceHeight, upscale);
         const canvas = document.createElement('canvas');
         canvas.width = targetWidth;
         canvas.height = targetHeight;
@@ -380,6 +386,8 @@ export async function enhanceImageLocally(
           if (imageFormat === 'jpeg') {
             try {
               const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+              // Canvas baked in EXIF rotation; reset orientation so viewers don't double-rotate.
+              completeRawExif.orientation = 1;
               enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
             } catch (exifError) {
               console.warn('Failed to embed EXIF, continuing without it:', exifError);
