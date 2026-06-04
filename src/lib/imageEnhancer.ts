@@ -292,15 +292,18 @@ export async function enhanceImageLocally(
     throw new Error('Invalid image data URL for local enhancement');
   }
   
-  // Calculate target dimensions
-  const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
-  
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     
     img.onload = () => {
       try {
+        // Use the browser-rotated (orientation-baked) natural dimensions so
+        // portrait images with EXIF orientation don't get drawn into a
+        // landscape canvas (which caused the rotation bug).
+        const sourceWidth = img.naturalWidth || originalWidth;
+        const sourceHeight = img.naturalHeight || originalHeight;
+        const { targetWidth, targetHeight } = calculateMinimumDimensions(sourceWidth, sourceHeight, upscale);
         const canvas = document.createElement('canvas');
         canvas.width = targetWidth;
         canvas.height = targetHeight;
