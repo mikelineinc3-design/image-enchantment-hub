@@ -172,8 +172,8 @@ const Index = () => {
             upscaleEnabled
           );
         }
-      } else {
-        // No filters selected - just upscale (if on) and embed EXIF (skip AI enhancement)
+      } else if (upscaleEnabled) {
+        // No filters but upscale on - resize and embed EXIF
         enhancedDataUrl = await enhanceImageLocally(
           sourceDataUrl,
           [],
@@ -183,6 +183,20 @@ const Index = () => {
           photo.imageFormat,
           upscaleEnabled
         );
+      } else {
+        // No filters and no upscale - keep original bytes untouched (preserves orientation,
+        // dimensions, transparency). Just embed EXIF for JPEG without re-encoding.
+        enhancedDataUrl = sourceDataUrl;
+        if (photo.imageFormat === 'jpeg') {
+          try {
+            const { generateRawExif } = await import('@/lib/exif');
+            const { embedExifIntoJpeg } = await import('@/lib/exifWriter');
+            const completeRawExif = generateRawExif(photo.rawExif, originalWidth, originalHeight);
+            enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
+          } catch (exifError) {
+            console.warn('Failed to embed EXIF, continuing without it:', exifError);
+          }
+        }
       }
       
       // Update with enhanced image
