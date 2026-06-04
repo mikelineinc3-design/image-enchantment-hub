@@ -125,6 +125,9 @@ export async function enhanceImageWithAI(
   // Only embed EXIF for JPEG (PNG doesn't support EXIF the same way)
   if (!isPng) {
     const completeRawExif = generateRawExif(rawExif, targetWidth, targetHeight);
+    // Canvas has already baked in any EXIF rotation, so force orientation = 1
+    // to prevent viewers from rotating the pixels a second time.
+    completeRawExif.orientation = 1;
     enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
   }
   
