@@ -401,6 +401,7 @@ const Index = () => {
           <ApiKeyManager 
             geminiKeys={getKeys('gemini')}
             openaiKeys={getKeys('openai')}
+            groqKeys={getKeys('groq')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />
