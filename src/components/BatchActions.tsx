@@ -1,11 +1,10 @@
-import { FilterType, FileType, MetadataMode } from '@/types/photo';
+import { FilterType, FileType, MetadataMode, UpscaleTarget } from '@/types/photo';
 import { FilterSelector } from './FilterSelector';
 import { FileTypeSelector } from './FileTypeSelector';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Download, Loader2, Database, FileText } from 'lucide-react';
+import { Sparkles, Download, Loader2, Database, FileText, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface BatchActionsProps {
@@ -13,16 +12,17 @@ interface BatchActionsProps {
   readyCount: number;
   selectedFilters: FilterType[];
   selectedFileType: FileType;
-  upscaleEnabled: boolean;
+  upscaleTarget: UpscaleTarget;
   metadataMode: MetadataMode;
   customPrompt: string;
   onFilterChange: (filters: FilterType[]) => void;
   onFileTypeChange: (fileType: FileType) => void;
-  onUpscaleChange: (enabled: boolean) => void;
+  onUpscaleTargetChange: (target: UpscaleTarget) => void;
   onMetadataModeChange: (mode: MetadataMode) => void;
   onCustomPromptChange: (prompt: string) => void;
   onEnhanceAll: () => void;
   onDownloadAll: () => void;
+  onDownloadCSV: () => void;
   isEnhancing: boolean;
 }
 
@@ -31,19 +31,26 @@ export function BatchActions({
   readyCount,
   selectedFilters,
   selectedFileType,
-  upscaleEnabled,
+  upscaleTarget,
   metadataMode,
   customPrompt,
   onFilterChange,
   onFileTypeChange,
-  onUpscaleChange,
+  onUpscaleTargetChange,
   onMetadataModeChange,
   onCustomPromptChange,
   onEnhanceAll,
   onDownloadAll,
+  onDownloadCSV,
   isEnhancing,
 }: BatchActionsProps) {
   if (photoCount === 0) return null;
+
+  const upscaleOptions: { value: UpscaleTarget; label: string }[] = [
+    { value: '4mp', label: '4MP' },
+    { value: '5mp', label: '5MP' },
+    { value: '6mp', label: '6MP' },
+  ];
 
   return (
     <div className="mb-6 p-4 rounded-xl gradient-card border border-border space-y-4">
