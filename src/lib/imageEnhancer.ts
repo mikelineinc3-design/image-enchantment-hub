@@ -83,7 +83,7 @@ export async function enhanceImageWithAI(
   originalHeight: number,
   imageFormat: ImageFormat,
   customApiKeys?: string[],
-  upscale: boolean = true
+  upscale: UpscaleTarget = 'none'
 ): Promise<string> {
   // Calculate target dimensions
   const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
@@ -252,19 +252,14 @@ export function validateImageDataUrl(dataUrl: string): boolean {
   return commaIndex > 0 && dataUrl.length - commaIndex > 50;
 }
 
-// Embed IPTC/XMP metadata for microstock compatibility
+// Embed IPTC/XMP metadata for microstock compatibility (JPEG + PNG)
 export function embedIptcXmpMetadata(
-  dataUrl: string, 
-  title: string, 
-  description: string, 
+  dataUrl: string,
+  title: string,
+  description: string,
   keywords: string,
   format: ImageFormat
 ): string {
-  // Only embed IPTC/XMP in JPEG files - PNG uses different metadata format
-  if (format === 'png') {
-    return dataUrl; // Return as-is for PNG
-  }
-  
   const xmpData: IptcXmpData = {
     title: sanitizeTitle(title),
     description: sanitizeTitle(description),
@@ -272,7 +267,10 @@ export function embedIptcXmpMetadata(
     author: 'scode',
     software: 'Adobe Photoshop',
   };
-  
+
+  if (format === 'png') {
+    return embedMetadataIntoPng(dataUrl, xmpData);
+  }
   return embedXmpIntoJpeg(dataUrl, xmpData);
 }
 
@@ -284,7 +282,7 @@ export async function enhanceImageLocally(
   originalWidth: number,
   originalHeight: number,
   imageFormat: ImageFormat,
-  upscale: boolean = true
+  upscale: UpscaleTarget = 'none'
 ): Promise<string> {
   // Validate input
   if (!imageDataUrl || imageDataUrl.length < 50) {
