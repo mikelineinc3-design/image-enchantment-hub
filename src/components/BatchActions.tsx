@@ -73,16 +73,27 @@ export function BatchActions({
             />
           </div>
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Upscale to 5MP:</span>
+            <span className="text-xs text-muted-foreground">Upscale Target (click to toggle):</span>
             <div className="flex items-center gap-2 h-9">
-              <Switch
-                id="upscale-toggle"
-                checked={upscaleEnabled}
-                onCheckedChange={onUpscaleChange}
-                disabled={isEnhancing}
-              />
-              <Label htmlFor="upscale-toggle" className="text-sm">
-                {upscaleEnabled ? 'On' : 'Off'}
+              {upscaleOptions.map(opt => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  size="sm"
+                  variant={upscaleTarget === opt.value ? 'default' : 'outline'}
+                  disabled={isEnhancing}
+                  onClick={() =>
+                    onUpscaleTargetChange(upscaleTarget === opt.value ? 'none' : opt.value)
+                  }
+                  className={cn(
+                    upscaleTarget === opt.value && 'gradient-primary text-primary-foreground'
+                  )}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+              <Label className="text-xs text-muted-foreground ml-1">
+                {upscaleTarget === 'none' ? 'No upscale' : `→ ${upscaleTarget.toUpperCase()}`}
               </Label>
             </div>
           </div>
