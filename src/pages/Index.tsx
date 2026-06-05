@@ -159,7 +159,7 @@ const Index = () => {
             originalHeight,
             photo.imageFormat,
             allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
-            upscaleEnabled
+            upscaleTarget
           );
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
@@ -170,11 +170,11 @@ const Index = () => {
             originalWidth,
             originalHeight,
             photo.imageFormat,
-            upscaleEnabled
+            upscaleTarget
           );
         }
-      } else if (upscaleEnabled) {
-        // No filters but upscale on - resize and embed EXIF
+      } else if (upscaleTarget !== 'none') {
+        // No filters but upscale selected - resize and embed EXIF
         enhancedDataUrl = await enhanceImageLocally(
           sourceDataUrl,
           [],
@@ -182,7 +182,7 @@ const Index = () => {
           originalWidth,
           originalHeight,
           photo.imageFormat,
-          upscaleEnabled
+          upscaleTarget
         );
       } else {
         // No filters and no upscale - keep original bytes untouched (preserves orientation,
