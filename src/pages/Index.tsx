@@ -5,11 +5,12 @@ import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
-import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode } from '@/types/photo';
+import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode, UpscaleTarget } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
+import { downloadCSV } from '@/lib/csvExporter';
 import { useApiKeys } from '@/hooks/useApiKeys';
 import { toast } from 'sonner';
 
@@ -27,7 +28,7 @@ const Index = () => {
   const [enhancingIds, setEnhancingIds] = useState<Set<string>>(new Set());
   const [batchFilters, setBatchFilters] = useState<FilterType[]>(['default']);
   const [batchFileType, setBatchFileType] = useState<FileType>('jpg');
-  const [upscaleEnabled, setUpscaleEnabled] = useState<boolean>(true);
+  const [upscaleTarget, setUpscaleTarget] = useState<UpscaleTarget>('none');
   const [metadataMode, setMetadataMode] = useState<MetadataMode>('default');
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const processingRef = useRef<boolean>(false);
