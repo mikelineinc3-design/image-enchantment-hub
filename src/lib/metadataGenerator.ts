@@ -14,14 +14,15 @@ export async function generateMicrostockMetadata(
   fileType: FileType,
   customApiKeys?: string[],
   mode: MetadataMode = 'default',
-  customPrompt?: string
+  customPrompt?: string,
+  groqApiKeys?: string[]
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt }
+        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys }
       });
 
       if (error) {
