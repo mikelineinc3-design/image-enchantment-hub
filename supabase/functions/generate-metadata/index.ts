@@ -71,6 +71,20 @@ serve(async (req) => {
         }
       }
     }
+
+    // Add custom Groq keys (user-provided). Groq keys are typically prefixed with "gsk_".
+    if (groqApiKeys && Array.isArray(groqApiKeys)) {
+      for (const k of groqApiKeys) {
+        if (
+          typeof k === 'string' &&
+          k.length >= 20 &&
+          k.length <= 200 &&
+          /^[A-Za-z0-9_\-]+$/.test(k)
+        ) {
+          apiKeys.push({ key: k, type: 'groq' });
+        }
+      }
+    }
     
     // Add Lovable API key as fallback
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
