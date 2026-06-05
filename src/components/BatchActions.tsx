@@ -122,6 +122,11 @@ export function BatchActions({
             <Download className="w-4 h-4" />
             Download All
           </Button>
+
+          <Button onClick={onDownloadCSV} disabled={readyCount === 0} variant="outline" size="sm">
+            <FileSpreadsheet className="w-4 h-4" />
+            Download CSV
+          </Button>
         </div>
       </div>
 
