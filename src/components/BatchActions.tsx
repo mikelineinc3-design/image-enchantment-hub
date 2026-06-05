@@ -1,11 +1,10 @@
-import { FilterType, FileType, MetadataMode } from '@/types/photo';
+import { FilterType, FileType, MetadataMode, UpscaleTarget } from '@/types/photo';
 import { FilterSelector } from './FilterSelector';
 import { FileTypeSelector } from './FileTypeSelector';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Download, Loader2, Database, FileText } from 'lucide-react';
+import { Sparkles, Download, Loader2, Database, FileText, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface BatchActionsProps {
@@ -13,16 +12,17 @@ interface BatchActionsProps {
   readyCount: number;
   selectedFilters: FilterType[];
   selectedFileType: FileType;
-  upscaleEnabled: boolean;
+  upscaleTarget: UpscaleTarget;
   metadataMode: MetadataMode;
   customPrompt: string;
   onFilterChange: (filters: FilterType[]) => void;
   onFileTypeChange: (fileType: FileType) => void;
-  onUpscaleChange: (enabled: boolean) => void;
+  onUpscaleTargetChange: (target: UpscaleTarget) => void;
   onMetadataModeChange: (mode: MetadataMode) => void;
   onCustomPromptChange: (prompt: string) => void;
   onEnhanceAll: () => void;
   onDownloadAll: () => void;
+  onDownloadCSV: () => void;
   isEnhancing: boolean;
 }
 
@@ -31,19 +31,26 @@ export function BatchActions({
   readyCount,
   selectedFilters,
   selectedFileType,
-  upscaleEnabled,
+  upscaleTarget,
   metadataMode,
   customPrompt,
   onFilterChange,
   onFileTypeChange,
-  onUpscaleChange,
+  onUpscaleTargetChange,
   onMetadataModeChange,
   onCustomPromptChange,
   onEnhanceAll,
   onDownloadAll,
+  onDownloadCSV,
   isEnhancing,
 }: BatchActionsProps) {
   if (photoCount === 0) return null;
+
+  const upscaleOptions: { value: UpscaleTarget; label: string }[] = [
+    { value: '4mp', label: '4MP' },
+    { value: '5mp', label: '5MP' },
+    { value: '6mp', label: '6MP' },
+  ];
 
   return (
     <div className="mb-6 p-4 rounded-xl gradient-card border border-border space-y-4">
@@ -66,16 +73,27 @@ export function BatchActions({
             />
           </div>
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Upscale to 5MP:</span>
+            <span className="text-xs text-muted-foreground">Upscale Target (click to toggle):</span>
             <div className="flex items-center gap-2 h-9">
-              <Switch
-                id="upscale-toggle"
-                checked={upscaleEnabled}
-                onCheckedChange={onUpscaleChange}
-                disabled={isEnhancing}
-              />
-              <Label htmlFor="upscale-toggle" className="text-sm">
-                {upscaleEnabled ? 'On' : 'Off'}
+              {upscaleOptions.map(opt => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  size="sm"
+                  variant={upscaleTarget === opt.value ? 'default' : 'outline'}
+                  disabled={isEnhancing}
+                  onClick={() =>
+                    onUpscaleTargetChange(upscaleTarget === opt.value ? 'none' : opt.value)
+                  }
+                  className={cn(
+                    upscaleTarget === opt.value && 'gradient-primary text-primary-foreground'
+                  )}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+              <Label className="text-xs text-muted-foreground ml-1">
+                {upscaleTarget === 'none' ? 'No upscale' : `→ ${upscaleTarget.toUpperCase()}`}
               </Label>
             </div>
           </div>
@@ -103,6 +121,11 @@ export function BatchActions({
           <Button onClick={onDownloadAll} disabled={readyCount === 0} variant="outline" size="sm">
             <Download className="w-4 h-4" />
             Download All
+          </Button>
+
+          <Button onClick={onDownloadCSV} disabled={readyCount === 0} variant="outline" size="sm">
+            <FileSpreadsheet className="w-4 h-4" />
+            Download CSV
           </Button>
         </div>
       </div>

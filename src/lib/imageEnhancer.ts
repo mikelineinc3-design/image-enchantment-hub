@@ -1,50 +1,46 @@
-import { FilterType, RawExifData, ImageFormat } from '@/types/photo';
+import { FilterType, RawExifData, ImageFormat, UpscaleTarget } from '@/types/photo';
 import { supabase } from '@/integrations/supabase/client';
 import { embedExifIntoJpeg } from './exifWriter';
 import { generateRawExif } from './exif';
 import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from './iptcXmpWriter';
+import { embedMetadataIntoPng } from './pngMetadataWriter';
 
-// Minimum 5 megapixels = 5,000,000 pixels
-const MIN_MEGAPIXELS = 5000000;
-// Maximum dimensions to prevent memory issues (10MP max)
-const MAX_MEGAPIXELS = 10000000;
-const MAX_DIMENSION = 4000; // Max width or height
+// Maximum dimensions to prevent memory issues
+const MAX_DIMENSION = 4000;
 
-function calculateMinimumDimensions(width: number, height: number, upscale: boolean = true): { targetWidth: number; targetHeight: number } {
-  const currentPixels = width * height;
-  
-  // If upscale is disabled, keep original dimensions (just cap at MAX_DIMENSION)
-  if (!upscale) {
+function targetToPixels(target: UpscaleTarget): number {
+  switch (target) {
+    case '4mp': return 4_000_000;
+    case '5mp': return 5_000_000;
+    case '6mp': return 6_000_000;
+    default: return 0;
+  }
+}
+
+function calculateMinimumDimensions(width: number, height: number, upscale: UpscaleTarget = 'none'): { targetWidth: number; targetHeight: number } {
+  const targetPixels = targetToPixels(upscale);
+
+  // No upscale target — keep original dimensions (capped at MAX_DIMENSION)
+  if (targetPixels === 0) {
     if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
       const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
       return { targetWidth: Math.floor(width * scale), targetHeight: Math.floor(height * scale) };
     }
     return { targetWidth: width, targetHeight: height };
   }
-  
-  // If already meets minimum, use original dimensions (up to max)
-  if (currentPixels >= MIN_MEGAPIXELS) {
-    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-      const scale = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
-      return { 
-        targetWidth: Math.floor(width * scale), 
-        targetHeight: Math.floor(height * scale) 
-      };
-    }
-    return { targetWidth: width, targetHeight: height };
-  }
-  
-  // Scale up to meet minimum 5MP, but cap at max
-  const scale = Math.sqrt(MIN_MEGAPIXELS / currentPixels);
-  let targetWidth = Math.ceil(width * scale);
-  let targetHeight = Math.ceil(height * scale);
-  
+
+  // Scale to exactly target megapixels (preserve aspect ratio)
+  const currentPixels = width * height;
+  const scale = Math.sqrt(targetPixels / currentPixels);
+  let targetWidth = Math.round(width * scale);
+  let targetHeight = Math.round(height * scale);
+
   if (targetWidth > MAX_DIMENSION || targetHeight > MAX_DIMENSION) {
     const capScale = Math.min(MAX_DIMENSION / targetWidth, MAX_DIMENSION / targetHeight);
     targetWidth = Math.floor(targetWidth * capScale);
     targetHeight = Math.floor(targetHeight * capScale);
   }
-  
+
   return { targetWidth, targetHeight };
 }
 
@@ -87,7 +83,7 @@ export async function enhanceImageWithAI(
   originalHeight: number,
   imageFormat: ImageFormat,
   customApiKeys?: string[],
-  upscale: boolean = true
+  upscale: UpscaleTarget = 'none'
 ): Promise<string> {
   // Calculate target dimensions
   const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
@@ -256,19 +252,14 @@ export function validateImageDataUrl(dataUrl: string): boolean {
   return commaIndex > 0 && dataUrl.length - commaIndex > 50;
 }
 
-// Embed IPTC/XMP metadata for microstock compatibility
+// Embed IPTC/XMP metadata for microstock compatibility (JPEG + PNG)
 export function embedIptcXmpMetadata(
-  dataUrl: string, 
-  title: string, 
-  description: string, 
+  dataUrl: string,
+  title: string,
+  description: string,
   keywords: string,
   format: ImageFormat
 ): string {
-  // Only embed IPTC/XMP in JPEG files - PNG uses different metadata format
-  if (format === 'png') {
-    return dataUrl; // Return as-is for PNG
-  }
-  
   const xmpData: IptcXmpData = {
     title: sanitizeTitle(title),
     description: sanitizeTitle(description),
@@ -276,7 +267,10 @@ export function embedIptcXmpMetadata(
     author: 'scode',
     software: 'Adobe Photoshop',
   };
-  
+
+  if (format === 'png') {
+    return embedMetadataIntoPng(dataUrl, xmpData);
+  }
   return embedXmpIntoJpeg(dataUrl, xmpData);
 }
 
@@ -288,7 +282,7 @@ export async function enhanceImageLocally(
   originalWidth: number,
   originalHeight: number,
   imageFormat: ImageFormat,
-  upscale: boolean = true
+  upscale: UpscaleTarget = 'none'
 ): Promise<string> {
   // Validate input
   if (!imageDataUrl || imageDataUrl.length < 50) {
