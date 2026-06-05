@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai';
+  type: 'lovable' | 'openai' | 'groq';
 }
 
 serve(async (req) => {
@@ -19,7 +19,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt } = await req.json();
+    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -68,6 +68,20 @@ serve(async (req) => {
           /^[A-Za-z0-9_\-]+$/.test(k)
         ) {
           apiKeys.push({ key: k, type: 'openai' });
+        }
+      }
+    }
+
+    // Add custom Groq keys (user-provided). Groq keys are typically prefixed with "gsk_".
+    if (groqApiKeys && Array.isArray(groqApiKeys)) {
+      for (const k of groqApiKeys) {
+        if (
+          typeof k === 'string' &&
+          k.length >= 20 &&
+          k.length <= 200 &&
+          /^[A-Za-z0-9_\-]+$/.test(k)
+        ) {
+          apiKeys.push({ key: k, type: 'groq' });
         }
       }
     }
@@ -167,6 +181,25 @@ RESPOND IN EXACT JSON FORMAT:
                 }
               ],
               max_tokens: 1000
+            }),
+          });
+        } else if (keyType === 'groq') {
+          // Groq (OpenAI-compatible). llama-3.3-70b-versatile is text-only,
+          // so send a description-style prompt without the image payload.
+          response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "llama-3.3-70b-versatile",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: "Generate optimized microstock metadata for the uploaded image based on the system instructions. Respond with the required JSON only." }
+              ],
+              max_tokens: 1500,
+              response_format: { type: "json_object" }
             }),
           });
         } else {

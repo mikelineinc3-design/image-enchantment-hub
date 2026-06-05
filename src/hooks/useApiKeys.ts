@@ -2,21 +2,30 @@ import { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'ai_api_keys';
 
-export type ApiProvider = 'gemini' | 'openai';
+export type ApiProvider = 'gemini' | 'openai' | 'groq';
 
 export interface ApiKeyConfig {
   gemini: string[];
   openai: string[];
+  groq: string[];
   currentIndex: {
     gemini: number;
     openai: number;
+    groq: number;
   };
 }
+
+const PROVIDER_LIMITS: Record<ApiProvider, number> = {
+  gemini: 5,
+  openai: 3,
+  groq: 3,
+};
 
 const defaultConfig: ApiKeyConfig = {
   gemini: [],
   openai: [],
-  currentIndex: { gemini: 0, openai: 0 }
+  groq: [],
+  currentIndex: { gemini: 0, openai: 0, groq: 0 }
 };
 
 export function useApiKeys() {
@@ -27,18 +36,23 @@ export function useApiKeys() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        // Handle legacy format (single array of keys)
         if (Array.isArray(parsed.keys)) {
           setConfig({
             gemini: parsed.keys,
             openai: [],
-            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0 }
+            groq: [],
+            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0 }
           });
         } else {
           setConfig({
             gemini: parsed.gemini || [],
             openai: parsed.openai || [],
-            currentIndex: parsed.currentIndex || { gemini: 0, openai: 0 }
+            groq: parsed.groq || [],
+            currentIndex: {
+              gemini: parsed.currentIndex?.gemini || 0,
+              openai: parsed.currentIndex?.openai || 0,
+              groq: parsed.currentIndex?.groq || 0,
+            }
           });
         }
       } catch {
@@ -53,7 +67,7 @@ export function useApiKeys() {
   };
 
   const addKey = (provider: ApiProvider, key: string) => {
-    if (config[provider].length >= 3) return false;
+    if (config[provider].length >= PROVIDER_LIMITS[provider]) return false;
     if (config[provider].includes(key)) return false;
     const newConfig = {
       ...config,
@@ -76,24 +90,11 @@ export function useApiKeys() {
     saveConfig(newConfig);
   };
 
-  const getKeys = (provider: ApiProvider) => {
-    return config[provider];
-  };
-
-  const getAllKeys = () => {
-    return {
-      gemini: config.gemini,
-      openai: config.openai
-    };
-  };
-
-  const getKeyCount = (provider: ApiProvider) => {
-    return config[provider].length;
-  };
-
-  const getTotalKeyCount = () => {
-    return config.gemini.length + config.openai.length;
-  };
+  const getKeys = (provider: ApiProvider) => config[provider];
+  const getAllKeys = () => ({ gemini: config.gemini, openai: config.openai, groq: config.groq });
+  const getKeyCount = (provider: ApiProvider) => config[provider].length;
+  const getTotalKeyCount = () => config.gemini.length + config.openai.length + config.groq.length;
+  const getKeyLimit = (provider: ApiProvider) => PROVIDER_LIMITS[provider];
 
   return {
     config,
@@ -102,6 +103,7 @@ export function useApiKeys() {
     getKeys,
     getAllKeys,
     getKeyCount,
-    getTotalKeyCount
+    getTotalKeyCount,
+    getKeyLimit,
   };
 }
