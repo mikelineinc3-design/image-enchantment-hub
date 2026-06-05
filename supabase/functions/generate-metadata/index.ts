@@ -183,6 +183,25 @@ RESPOND IN EXACT JSON FORMAT:
               max_tokens: 1000
             }),
           });
+        } else if (keyType === 'groq') {
+          // Groq (OpenAI-compatible). llama-3.3-70b-versatile is text-only,
+          // so send a description-style prompt without the image payload.
+          response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "llama-3.3-70b-versatile",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: "Generate optimized microstock metadata for the uploaded image based on the system instructions. Respond with the required JSON only." }
+              ],
+              max_tokens: 1500,
+              response_format: { type: "json_object" }
+            }),
+          });
         } else {
           // Lovable AI Gateway
           response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
