@@ -2,6 +2,7 @@ export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural' | 'prod
 export type FileType = 'jpg' | 'png' | 'eps' | 'svg';
 export type ImageFormat = 'jpeg' | 'png';
 export type MetadataMode = 'default' | 'data';
+export type UpscaleTarget = 'none' | '4mp' | '5mp' | '6mp';
 
 export interface ExifData {
   make?: string;
