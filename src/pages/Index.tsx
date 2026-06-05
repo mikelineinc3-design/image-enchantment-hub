@@ -269,7 +269,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getAllKeys, upscaleEnabled, metadataMode, customPrompt]);
+  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt]);
 
   const handleEnhanceAll = useCallback(async () => {
     if (processingRef.current) {
@@ -413,16 +413,17 @@ const Index = () => {
           readyCount={readyCount}
           selectedFilters={batchFilters}
           selectedFileType={batchFileType}
-          upscaleEnabled={upscaleEnabled}
+          upscaleTarget={upscaleTarget}
           metadataMode={metadataMode}
           customPrompt={customPrompt}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}
-          onUpscaleChange={setUpscaleEnabled}
+          onUpscaleTargetChange={setUpscaleTarget}
           onMetadataModeChange={setMetadataMode}
           onCustomPromptChange={setCustomPrompt}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
+          onDownloadCSV={() => downloadCSV(photos.filter(p => p.status === 'ready' && p.metadata))}
           isEnhancing={isEnhancing}
         />
 
