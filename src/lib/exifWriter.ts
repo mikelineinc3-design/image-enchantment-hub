@@ -15,7 +15,13 @@ export interface CameraExifData {
   colorSpace?: number;
   flash?: number;
   whiteBalance?: number;
+  copyright?: string;
+  artist?: string;
 }
+
+// Legal defaults injected into every output file
+export const LEGAL_COPYRIGHT = 'Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.';
+export const LEGAL_ARTIST = 'Microstock Contributor';
 
 // Convert rational number format for EXIF
 function toRational(value: number): [number, number] {
