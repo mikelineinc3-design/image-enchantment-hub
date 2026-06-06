@@ -5,6 +5,8 @@ import { sanitizeTitle, sanitizeKeywords } from './iptcXmpWriter';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
 
+const NON_RETRYABLE_ERROR_CODES = new Set(['payment_required', 'invalid_api_key']);
+
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -18,6 +20,7 @@ export async function generateMicrostockMetadata(
   groqApiKeys?: string[]
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
+  let lastErrorCode: string | undefined;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -33,7 +36,9 @@ export async function generateMicrostockMetadata(
       }
 
       if (data.error) {
+        lastErrorCode = typeof data.code === 'string' ? data.code : undefined;
         lastError = new Error(data.error);
+        if (lastErrorCode && NON_RETRYABLE_ERROR_CODES.has(lastErrorCode)) throw lastError;
         if (attempt < MAX_RETRIES) { await sleep(RETRY_DELAY * attempt); continue; }
         throw lastError;
       }
@@ -53,6 +58,7 @@ export async function generateMicrostockMetadata(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       console.error(`Metadata generation attempt ${attempt}/${MAX_RETRIES} failed:`, err);
+      if (lastErrorCode && NON_RETRYABLE_ERROR_CODES.has(lastErrorCode)) break;
       if (attempt < MAX_RETRIES) await sleep(RETRY_DELAY * attempt);
     }
   }
