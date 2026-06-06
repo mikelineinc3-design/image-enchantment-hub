@@ -306,7 +306,9 @@ RESPOND IN EXACT JSON FORMAT:
         }
 
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
+        const content = keyType === 'gemini'
+          ? (data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '')
+          : data.choices?.[0]?.message?.content;
         
         if (!content) {
           lastFailure = {
