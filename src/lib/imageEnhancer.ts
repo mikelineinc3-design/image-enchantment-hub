@@ -264,8 +264,10 @@ export function embedIptcXmpMetadata(
     title: sanitizeTitle(title),
     description: sanitizeTitle(description),
     keywords: sanitizeKeywords(keywords),
-    author: 'scode',
+    author: 'Microstock Contributor',
     software: 'Adobe Photoshop',
+    copyright: 'Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.',
+    rights: 'Microstock Commercial License',
   };
 
   if (format === 'png') {
