@@ -363,20 +363,30 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           continue;
         }
         
-        // Sanitize title (max 195 chars, only alphanumeric + spaces, commas, periods, hyphens)
+        // Sanitize title (100-200 chars target, only alphanumeric + spaces, commas, periods, hyphens)
         const sanitizedTitle = (String(metadata.title || ''))
-          .replace(/[^a-zA-Z0-9\s,.\-]/g, '') // Strict: only letters, numbers, basic punctuation
+          .replace(/[^a-zA-Z0-9\s,.\-]/g, '')
           .replace(/\s+/g, ' ')
           .trim()
-          .slice(0, 195);
-        
-        // Sanitize keywords (max 45, only lowercase alphanumeric + spaces, hyphens - NO special chars)
+          .slice(0, 200);
+
+        // Sanitize keywords (max 49, lowercase alphanumeric + spaces + hyphens). De-dup preserves order.
+        const seen = new Set<string>();
         const sanitizedKeywords = (String(metadata.keywords || ''))
           .split(',')
           .map((k: string) => k.trim().toLowerCase().replace(/[^a-z0-9\s\-]/g, '').replace(/\s+/g, ' ').trim())
-          .filter((k: string) => k.length > 0 && k.length <= 50)
-          .slice(0, 45)
+          .filter((k: string) => {
+            if (!k || k.length > 50) return false;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          })
+          .slice(0, 49)
           .join(', ');
+
+        const LEGAL_COPYRIGHT = 'Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.';
+        const LEGAL_RIGHTS = 'Microstock Commercial License';
+        const LEGAL_AUTHOR = 'Microstock Contributor';
 
         console.log(`Metadata generated successfully using ${keyType} API`);
         return new Response(JSON.stringify({
@@ -385,6 +395,9 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           keywords: sanitizedKeywords,
           adobeCategory: String(metadata.adobeCategory || 'Lifestyle'),
           shutterstockCategory: String(metadata.shutterstockCategory || 'Miscellaneous'),
+          copyright: LEGAL_COPYRIGHT,
+          rights: LEGAL_RIGHTS,
+          author: LEGAL_AUTHOR,
           aiTrainingNote: typeof metadata.aiTrainingNote === 'string' ? metadata.aiTrainingNote.slice(0, 1000) : undefined
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
