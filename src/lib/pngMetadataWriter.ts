@@ -182,6 +182,8 @@ export function embedMetadataIntoPng(pngDataUrl: string, data: IptcXmpData): str
       buildTextChunk('Description', data.description),
       buildTextChunk('Keywords', data.keywords.join('; ')),
       buildTextChunk('Author', data.author),
+      buildTextChunk('Copyright', data.copyright || ''),
+      buildTextChunk('Rights', data.rights || ''),
       buildTextChunk('Software', data.software),
       buildItxtXmpChunk(createXmpPacket(data)),
     ];
