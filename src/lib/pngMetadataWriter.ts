@@ -165,7 +165,7 @@ export function embedMetadataIntoPng(pngDataUrl: string, data: IptcXmpData): str
           nullIdx > 8
             ? new TextDecoder('latin1').decode(chunk.slice(8, nullIdx))
             : '';
-        const skip = ['Title', 'Description', 'Keywords', 'Author', 'Software', 'XML:com.adobe.xmp'];
+        const skip = ['Title', 'Description', 'Keywords', 'Author', 'Copyright', 'Rights', 'Software', 'XML:com.adobe.xmp'];
         if (!skip.includes(keyword)) keepChunks.push(chunk);
       } else {
         keepChunks.push(chunk);
