@@ -182,8 +182,8 @@ RESPOND IN EXACT JSON FORMAT:
             }),
           });
         } else if (keyType === 'groq') {
-          // Groq (OpenAI-compatible). llama-3.3-70b-versatile is text-only,
-          // so send a description-style prompt without the image payload.
+          // Groq vision-capable model. Pass the actual image so the model
+          // sees the pixels instead of hallucinating from the prompt alone.
           response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -191,13 +191,38 @@ RESPOND IN EXACT JSON FORMAT:
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "llama-3.3-70b-versatile",
+              model: "meta-llama/llama-4-scout-17b-16e-instruct",
               messages: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: "Generate optimized microstock metadata for the uploaded image based on the system instructions. Respond with the required JSON only." }
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only." },
+                    { type: "image_url", image_url: { url: imageBase64 } }
+                  ]
+                }
               ],
               max_tokens: 1500,
               response_format: { type: "json_object" }
+            }),
+          });
+        } else if (keyType === 'gemini') {
+          // Direct Google Generative Language API (vision-capable).
+          const base64Match = imageBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+          const mimeType = base64Match?.[1] || 'image/jpeg';
+          const rawBase64 = base64Match?.[2] || imageBase64.split(',').pop() || '';
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                role: "user",
+                parts: [
+                  { text: `${systemPrompt}\n\nAnalyze the attached image and respond with the required JSON only.` },
+                  { inline_data: { mime_type: mimeType, data: rawBase64 } }
+                ]
+              }],
+              generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
             }),
           });
         } else {
