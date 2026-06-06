@@ -227,7 +227,8 @@ const Index = () => {
           allKeys.openai.length > 0 ? allKeys.openai : undefined,
           metadataMode,
           customPrompt,
-          allKeys.groq.length > 0 ? allKeys.groq : undefined
+          allKeys.groq.length > 0 ? allKeys.groq : undefined,
+          allKeys.gemini.length > 0 ? allKeys.gemini : undefined
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)

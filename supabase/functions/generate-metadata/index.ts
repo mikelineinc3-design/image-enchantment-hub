@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai' | 'groq';
+  type: 'lovable' | 'openai' | 'groq' | 'gemini';
 }
 
 interface ProviderFailure {
@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys } = await req.json();
+    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -63,41 +63,30 @@ serve(async (req) => {
     
     const safeFileType = ALLOWED_FILE_TYPES.includes(fileType) ? fileType : 'jpg';
     
-    // Collect API keys with their types
+    // Collect API keys with their types — UNIFIED ROTATION POOL.
+    // User-provided keys are tried first (any provider), then Lovable as last fallback.
     const apiKeys: ApiKeyEntry[] = [];
-    
-    // Add custom OpenAI keys first (user-provided)
+    const isValidKey = (k: unknown): k is string =>
+      typeof k === 'string' && k.length >= 20 && k.length <= 200 && /^[A-Za-z0-9_\-]+$/.test(k);
+
+    // Gemini direct keys (Google AI Studio) — vision-capable
+    if (geminiApiKeys && Array.isArray(geminiApiKeys)) {
+      for (const k of geminiApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'gemini' });
+    }
+    // OpenAI keys — vision-capable (gpt-4o-mini)
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      for (const k of customApiKeys) {
-        if (
-          typeof k === 'string' &&
-          k.length >= 20 &&
-          k.length <= 200 &&
-          /^[A-Za-z0-9_\-]+$/.test(k)
-        ) {
-          apiKeys.push({ key: k, type: 'openai' });
-        }
-      }
+      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'openai' });
+    }
+    // Groq keys — vision-capable model used below
+    if (groqApiKeys && Array.isArray(groqApiKeys)) {
+      for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'groq' });
     }
 
-    // Add custom Groq keys (user-provided). Groq keys are typically prefixed with "gsk_".
-    if (groqApiKeys && Array.isArray(groqApiKeys)) {
-      for (const k of groqApiKeys) {
-        if (
-          typeof k === 'string' &&
-          k.length >= 20 &&
-          k.length <= 200 &&
-          /^[A-Za-z0-9_\-]+$/.test(k)
-        ) {
-          apiKeys.push({ key: k, type: 'groq' });
-        }
-      }
-    }
-    
-    // Add Lovable API key as fallback
+    // Lovable AI Gateway as final fallback
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (LOVABLE_API_KEY) {
       apiKeys.push({ key: LOVABLE_API_KEY, type: 'lovable' });
+
     }
     
     if (apiKeys.length === 0) {
@@ -193,8 +182,8 @@ RESPOND IN EXACT JSON FORMAT:
             }),
           });
         } else if (keyType === 'groq') {
-          // Groq (OpenAI-compatible). llama-3.3-70b-versatile is text-only,
-          // so send a description-style prompt without the image payload.
+          // Groq vision-capable model. Pass the actual image so the model
+          // sees the pixels instead of hallucinating from the prompt alone.
           response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -202,13 +191,38 @@ RESPOND IN EXACT JSON FORMAT:
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "llama-3.3-70b-versatile",
+              model: "meta-llama/llama-4-scout-17b-16e-instruct",
               messages: [
                 { role: "system", content: systemPrompt },
-                { role: "user", content: "Generate optimized microstock metadata for the uploaded image based on the system instructions. Respond with the required JSON only." }
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only." },
+                    { type: "image_url", image_url: { url: imageBase64 } }
+                  ]
+                }
               ],
               max_tokens: 1500,
               response_format: { type: "json_object" }
+            }),
+          });
+        } else if (keyType === 'gemini') {
+          // Direct Google Generative Language API (vision-capable).
+          const base64Match = imageBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+          const mimeType = base64Match?.[1] || 'image/jpeg';
+          const rawBase64 = base64Match?.[2] || imageBase64.split(',').pop() || '';
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                role: "user",
+                parts: [
+                  { text: `${systemPrompt}\n\nAnalyze the attached image and respond with the required JSON only.` },
+                  { inline_data: { mime_type: mimeType, data: rawBase64 } }
+                ]
+              }],
+              generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
             }),
           });
         } else {
@@ -292,7 +306,9 @@ RESPOND IN EXACT JSON FORMAT:
         }
 
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
+        const content = keyType === 'gemini'
+          ? (data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '')
+          : data.choices?.[0]?.message?.content;
         
         if (!content) {
           lastFailure = {
