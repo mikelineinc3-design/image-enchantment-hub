@@ -63,41 +63,30 @@ serve(async (req) => {
     
     const safeFileType = ALLOWED_FILE_TYPES.includes(fileType) ? fileType : 'jpg';
     
-    // Collect API keys with their types
+    // Collect API keys with their types — UNIFIED ROTATION POOL.
+    // User-provided keys are tried first (any provider), then Lovable as last fallback.
     const apiKeys: ApiKeyEntry[] = [];
-    
-    // Add custom OpenAI keys first (user-provided)
+    const isValidKey = (k: unknown): k is string =>
+      typeof k === 'string' && k.length >= 20 && k.length <= 200 && /^[A-Za-z0-9_\-]+$/.test(k);
+
+    // Gemini direct keys (Google AI Studio) — vision-capable
+    if (geminiApiKeys && Array.isArray(geminiApiKeys)) {
+      for (const k of geminiApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'gemini' });
+    }
+    // OpenAI keys — vision-capable (gpt-4o-mini)
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      for (const k of customApiKeys) {
-        if (
-          typeof k === 'string' &&
-          k.length >= 20 &&
-          k.length <= 200 &&
-          /^[A-Za-z0-9_\-]+$/.test(k)
-        ) {
-          apiKeys.push({ key: k, type: 'openai' });
-        }
-      }
+      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'openai' });
+    }
+    // Groq keys — vision-capable model used below
+    if (groqApiKeys && Array.isArray(groqApiKeys)) {
+      for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'groq' });
     }
 
-    // Add custom Groq keys (user-provided). Groq keys are typically prefixed with "gsk_".
-    if (groqApiKeys && Array.isArray(groqApiKeys)) {
-      for (const k of groqApiKeys) {
-        if (
-          typeof k === 'string' &&
-          k.length >= 20 &&
-          k.length <= 200 &&
-          /^[A-Za-z0-9_\-]+$/.test(k)
-        ) {
-          apiKeys.push({ key: k, type: 'groq' });
-        }
-      }
-    }
-    
-    // Add Lovable API key as fallback
+    // Lovable AI Gateway as final fallback
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (LOVABLE_API_KEY) {
       apiKeys.push({ key: LOVABLE_API_KEY, type: 'lovable' });
+
     }
     
     if (apiKeys.length === 0) {
