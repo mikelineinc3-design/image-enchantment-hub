@@ -45,6 +45,17 @@ ${keywordTags}
           <rdf:li>${escapeXml(data.author)}</rdf:li>
         </rdf:Seq>
       </dc:creator>
+      <dc:rights>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">${escapeXml(data.copyright || '')}</rdf:li>
+        </rdf:Alt>
+      </dc:rights>
+      <xmpRights:Marked>True</xmpRights:Marked>
+      <xmpRights:UsageTerms>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">${escapeXml(data.rights || '')}</rdf:li>
+        </rdf:Alt>
+      </xmpRights:UsageTerms>
       <xmp:CreatorTool>${escapeXml(data.software)}</xmp:CreatorTool>
       <photoshop:Credit>${escapeXml(data.author)}</photoshop:Credit>
       <photoshop:Source>${escapeXml(data.author)}</photoshop:Source>
