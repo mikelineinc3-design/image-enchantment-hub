@@ -248,10 +248,12 @@ const Index = () => {
         return true;
       } catch (metadataError) {
         console.warn('Metadata generation failed:', metadataError);
-        // Still mark as ready but without metadata
+        const message = metadataError instanceof Error ? metadataError.message : 'Metadata generation failed';
+        toast.error(message);
+        // Still mark as ready but show the metadata error so the app does not blank out.
         setPhotos(prev => prev.map(p => 
           p.id === id 
-            ? { ...p, status: 'ready' }
+            ? { ...p, status: 'ready', error: message }
             : p
         ));
         return true; // Enhancement succeeded even if metadata failed
