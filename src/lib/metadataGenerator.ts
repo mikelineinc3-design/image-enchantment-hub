@@ -38,7 +38,8 @@ export async function generateMicrostockMetadata(
   customApiKeys?: string[],
   mode: MetadataMode = 'default',
   customPrompt?: string,
-  groqApiKeys?: string[]
+  groqApiKeys?: string[],
+  geminiApiKeys?: string[]
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
   let lastErrorCode: string | undefined;
@@ -46,7 +47,7 @@ export async function generateMicrostockMetadata(
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys }
+        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys }
       });
 
       if (error) {
