@@ -167,26 +167,32 @@ export function embedXmpIntoJpeg(jpegDataUrl: string, xmpData: IptcXmpData): str
   }
 }
 
-// Sanitize title for microstock (max 195 chars, only letters, numbers, spaces, commas, periods, hyphens)
+// Sanitize title for microstock (100-200 chars target, only letters, numbers, spaces, commas, periods, hyphens)
 export function sanitizeTitle(title: string): string {
   return title
-    .replace(/[^a-zA-Z0-9\s,.\-]/g, '') // Only allow alphanumeric, spaces, commas, periods, hyphens
-    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/[^a-zA-Z0-9\s,.\-]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 195);
+    .slice(0, 200);
 }
 
-// Sanitize keywords (max 45 keywords, only letters, numbers, spaces, hyphens - NO special characters)
+// Sanitize keywords (max 49 keywords, only letters, numbers, spaces, hyphens - NO special characters)
 export function sanitizeKeywords(keywords: string): string[] {
+  const seen = new Set<string>();
   return keywords
     .split(',')
     .map(k => k
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9\s\-]/g, '') // Only allow lowercase letters, numbers, spaces, hyphens
-      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/[^a-z0-9\s\-]/g, '')
+      .replace(/\s+/g, ' ')
       .trim()
     )
-    .filter(k => k.length > 0 && k.length <= 50) // Filter empty and overly long keywords
-    .slice(0, 45);
+    .filter(k => {
+      if (!k || k.length > 50) return false;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, 49);
 }
