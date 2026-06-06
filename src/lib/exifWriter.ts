@@ -72,6 +72,9 @@ export function embedExifIntoJpeg(
     if (exifData.software) {
       exifObj['0th'][piexif.ImageIFD.Software] = exifData.software;
     }
+    // Always inject legal copyright + artist (overrideable per call)
+    exifObj['0th'][piexif.ImageIFD.Copyright] = exifData.copyright || LEGAL_COPYRIGHT;
+    exifObj['0th'][piexif.ImageIFD.Artist] = exifData.artist || LEGAL_ARTIST;
     if (exifData.dateTime) {
       exifObj['0th'][piexif.ImageIFD.DateTime] = exifData.dateTime;
     }
