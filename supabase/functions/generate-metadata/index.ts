@@ -13,6 +13,14 @@ interface ApiKeyEntry {
   type: 'lovable' | 'openai' | 'groq';
 }
 
+interface ProviderFailure {
+  provider: ApiKeyEntry['type'];
+  status: number;
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -152,7 +160,8 @@ RESPOND IN EXACT JSON FORMAT:
     console.log(`Generating metadata for ${safeFileType}, available keys: ${apiKeys.length}`);
 
     // Try each API key
-    let lastError = null;
+    let lastFailure: ProviderFailure | null = null;
+    const failures: ProviderFailure[] = [];
     for (let i = 0; i < apiKeys.length; i++) {
       const { key: apiKey, type: keyType } = apiKeys[i];
       try {
@@ -228,26 +237,57 @@ RESPOND IN EXACT JSON FORMAT:
 
         if (response.status === 429) {
           console.log('Rate limited, trying next key...');
-          lastError = new Error('Rate limited');
+          await response.text().catch(() => '');
+          lastFailure = {
+            provider: keyType,
+            status: 429,
+            code: 'rate_limited',
+            message: 'Metadata generation is rate limited. Try again later or add another API key.',
+            retryable: true,
+          };
+          failures.push(lastFailure);
           continue;
         }
 
         if (response.status === 402) {
           console.log('Payment required, trying next key...');
-          lastError = new Error('Payment required');
+          await response.text().catch(() => '');
+          lastFailure = {
+            provider: keyType,
+            status: 402,
+            code: 'payment_required',
+            message: 'Default AI credits are exhausted. Add an OpenAI or Groq API key in AI API Keys, or add AI credits, then try again.',
+            retryable: false,
+          };
+          failures.push(lastFailure);
           continue;
         }
 
         if (response.status === 401) {
           console.log('Invalid API key, trying next key...');
-          lastError = new Error('Invalid API key');
+          await response.text().catch(() => '');
+          lastFailure = {
+            provider: keyType,
+            status: 401,
+            code: 'invalid_api_key',
+            message: 'A metadata API key is invalid. Remove it and add a valid key, then try again.',
+            retryable: false,
+          };
+          failures.push(lastFailure);
           continue;
         }
 
         if (!response.ok) {
           const errorText = await response.text();
           console.error("API error:", response.status, errorText);
-          lastError = new Error(`API error: ${response.status}`);
+          lastFailure = {
+            provider: keyType,
+            status: response.status >= 500 ? 503 : response.status,
+            code: 'provider_error',
+            message: 'Metadata provider returned an error. Please try another API key or try again later.',
+            retryable: response.status >= 500,
+          };
+          failures.push(lastFailure);
           continue;
         }
 
@@ -255,28 +295,55 @@ RESPOND IN EXACT JSON FORMAT:
         const content = data.choices?.[0]?.message?.content;
         
         if (!content) {
-          lastError = new Error("No response from AI");
+          lastFailure = {
+            provider: keyType,
+            status: 502,
+            code: 'empty_ai_response',
+            message: 'Metadata provider returned an empty response. Please try again.',
+            retryable: true,
+          };
+          failures.push(lastFailure);
           continue;
         }
 
         // Parse JSON from response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-          lastError = new Error("No JSON found in response");
+          lastFailure = {
+            provider: keyType,
+            status: 502,
+            code: 'invalid_ai_response',
+            message: 'Metadata provider returned an unreadable response. Please try again.',
+            retryable: true,
+          };
+          failures.push(lastFailure);
           continue;
         }
 
-        const metadata = JSON.parse(jsonMatch[0]);
+        let metadata: Record<string, unknown>;
+        try {
+          metadata = JSON.parse(jsonMatch[0]);
+        } catch (_parseError) {
+          lastFailure = {
+            provider: keyType,
+            status: 502,
+            code: 'invalid_ai_json',
+            message: 'Metadata provider returned invalid JSON. Please try again.',
+            retryable: true,
+          };
+          failures.push(lastFailure);
+          continue;
+        }
         
         // Sanitize title (max 195 chars, only alphanumeric + spaces, commas, periods, hyphens)
-        const sanitizedTitle = (metadata.title || '')
+        const sanitizedTitle = (String(metadata.title || ''))
           .replace(/[^a-zA-Z0-9\s,.\-]/g, '') // Strict: only letters, numbers, basic punctuation
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 195);
         
         // Sanitize keywords (max 45, only lowercase alphanumeric + spaces, hyphens - NO special chars)
-        const sanitizedKeywords = (metadata.keywords || '')
+        const sanitizedKeywords = (String(metadata.keywords || ''))
           .split(',')
           .map((k: string) => k.trim().toLowerCase().replace(/[^a-z0-9\s\-]/g, '').replace(/\s+/g, ' ').trim())
           .filter((k: string) => k.length > 0 && k.length <= 50)
@@ -285,25 +352,41 @@ RESPOND IN EXACT JSON FORMAT:
 
         console.log(`Metadata generated successfully using ${keyType} API`);
         return new Response(JSON.stringify({
-          filename: metadata.filename || `image.${safeFileType}`,
+          filename: String(metadata.filename || `image.${safeFileType}`),
           title: sanitizedTitle,
           keywords: sanitizedKeywords,
-          adobeCategory: metadata.adobeCategory || 'Lifestyle',
-          shutterstockCategory: metadata.shutterstockCategory || 'Miscellaneous',
+          adobeCategory: String(metadata.adobeCategory || 'Lifestyle'),
+          shutterstockCategory: String(metadata.shutterstockCategory || 'Miscellaneous'),
           aiTrainingNote: typeof metadata.aiTrainingNote === 'string' ? metadata.aiTrainingNote.slice(0, 1000) : undefined
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } catch (error) {
         console.error(`Error with ${keyType} API key:`, error);
-        lastError = error;
+        lastFailure = {
+          provider: keyType,
+          status: 503,
+          code: 'provider_exception',
+          message: error instanceof Error ? error.message : 'Metadata provider failed unexpectedly.',
+          retryable: true,
+        };
+        failures.push(lastFailure);
       }
     }
 
     // All keys failed
-    console.error('All API keys failed:', lastError);
-    return new Response(JSON.stringify({ error: 'Metadata service unavailable. Please try again.' }), {
-      status: 503,
+    const selectedFailure = failures.find((failure) => failure.code === 'payment_required')
+      || failures.find((failure) => failure.code === 'rate_limited')
+      || (failures.length > 0 && failures.every((failure) => failure.code === 'invalid_api_key') ? failures[0] : null)
+      || lastFailure;
+
+    console.error('All API keys failed:', selectedFailure);
+    return new Response(JSON.stringify({
+      error: selectedFailure?.message || 'Metadata service unavailable. Please try again.',
+      code: selectedFailure?.code || 'metadata_unavailable',
+      retryable: selectedFailure?.retryable ?? true,
+    }), {
+      status: selectedFailure?.status || 503,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
