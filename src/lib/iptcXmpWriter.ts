@@ -8,6 +8,7 @@ export interface IptcXmpData {
   author: string;
   software: string;
   copyright?: string;
+  rights?: string;
 }
 
 // Create XMP packet with Dublin Core metadata
