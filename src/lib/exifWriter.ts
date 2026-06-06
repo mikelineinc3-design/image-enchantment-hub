@@ -15,7 +15,13 @@ export interface CameraExifData {
   colorSpace?: number;
   flash?: number;
   whiteBalance?: number;
+  copyright?: string;
+  artist?: string;
 }
+
+// Legal defaults injected into every output file
+export const LEGAL_COPYRIGHT = 'Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.';
+export const LEGAL_ARTIST = 'Microstock Contributor';
 
 // Convert rational number format for EXIF
 function toRational(value: number): [number, number] {
@@ -66,6 +72,9 @@ export function embedExifIntoJpeg(
     if (exifData.software) {
       exifObj['0th'][piexif.ImageIFD.Software] = exifData.software;
     }
+    // Always inject legal copyright + artist (overrideable per call)
+    exifObj['0th'][piexif.ImageIFD.Copyright] = exifData.copyright || LEGAL_COPYRIGHT;
+    exifObj['0th'][piexif.ImageIFD.Artist] = exifData.artist || LEGAL_ARTIST;
     if (exifData.dateTime) {
       exifObj['0th'][piexif.ImageIFD.DateTime] = exifData.dateTime;
     }

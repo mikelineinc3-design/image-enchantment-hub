@@ -114,6 +114,7 @@ function createXmpPacket(d: IptcXmpData): string {
     <rdf:Description rdf:about=""
       xmlns:dc="http://purl.org/dc/elements/1.1/"
       xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+      xmlns:xmpRights="http://ns.adobe.com/xap/1.0/rights/"
       xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/">
       <dc:title><rdf:Alt><rdf:li xml:lang="x-default">${esc(d.title)}</rdf:li></rdf:Alt></dc:title>
       <dc:description><rdf:Alt><rdf:li xml:lang="x-default">${esc(d.description)}</rdf:li></rdf:Alt></dc:description>
@@ -121,6 +122,9 @@ function createXmpPacket(d: IptcXmpData): string {
 ${kw}
       </rdf:Bag></dc:subject>
       <dc:creator><rdf:Seq><rdf:li>${esc(d.author)}</rdf:li></rdf:Seq></dc:creator>
+      <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">${esc(d.copyright || '')}</rdf:li></rdf:Alt></dc:rights>
+      <xmpRights:Marked>True</xmpRights:Marked>
+      <xmpRights:UsageTerms><rdf:Alt><rdf:li xml:lang="x-default">${esc(d.rights || '')}</rdf:li></rdf:Alt></xmpRights:UsageTerms>
       <xmp:CreatorTool>${esc(d.software)}</xmp:CreatorTool>
       <photoshop:Credit>${esc(d.author)}</photoshop:Credit>
     </rdf:Description>
@@ -161,7 +165,7 @@ export function embedMetadataIntoPng(pngDataUrl: string, data: IptcXmpData): str
           nullIdx > 8
             ? new TextDecoder('latin1').decode(chunk.slice(8, nullIdx))
             : '';
-        const skip = ['Title', 'Description', 'Keywords', 'Author', 'Software', 'XML:com.adobe.xmp'];
+        const skip = ['Title', 'Description', 'Keywords', 'Author', 'Copyright', 'Rights', 'Software', 'XML:com.adobe.xmp'];
         if (!skip.includes(keyword)) keepChunks.push(chunk);
       } else {
         keepChunks.push(chunk);
@@ -178,6 +182,8 @@ export function embedMetadataIntoPng(pngDataUrl: string, data: IptcXmpData): str
       buildTextChunk('Description', data.description),
       buildTextChunk('Keywords', data.keywords.join('; ')),
       buildTextChunk('Author', data.author),
+      buildTextChunk('Copyright', data.copyright || ''),
+      buildTextChunk('Rights', data.rights || ''),
       buildTextChunk('Software', data.software),
       buildItxtXmpChunk(createXmpPacket(data)),
     ];

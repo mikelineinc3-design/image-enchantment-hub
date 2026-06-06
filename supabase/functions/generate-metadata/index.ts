@@ -97,51 +97,63 @@ serve(async (req) => {
     }
 
     const isVector = safeFileType === 'eps' || safeFileType === 'svg';
-    const fileTypeContext = isVector 
-      ? "This is a VECTOR file (EPS/SVG). Include keywords like 'vector', 'eps', 'illustration', 'clipart', 'graphic design'."
-      : "This is a PHOTO/RASTER file (JPG/PNG). NEVER use keywords like 'vector', 'eps', 'illustration', or 'clipart'.";
+    const assetFormatLabel = isVector ? 'VECTOR (EPS/SVG)' : `RASTER PHOTO (${safeFileType.toUpperCase()})`;
+    const vectorRule = isVector
+      ? "Include vector-specific keywords (vector, eps, illustration, clipart, graphic design) where they genuinely fit."
+      : "STRICTLY DO NOT include 'vector', 'eps', 'illustration', or 'clipart' keywords — this is a raster photograph.";
 
-    const dataModePrompt = `Act as an expert Shutterstock Contributor SEO manager. Analyze this uploaded image and provide the following for Shutterstock metadata:
+    const masterSystemPrompt = `You are an automated microstock metadata engine for Adobe Stock and Shutterstock. Output ONLY a single strict JSON object — no prose, no greetings, no markdown, no code fences.
 
-Title/Description: Write a clear, descriptive, and literal title (under 200 characters). Focus on exactly what is happening, the subject's action, the setting, and light conditions. Avoid poetic or metaphorical words.
+ACTIVE ASSET FORMAT: ${assetFormatLabel}
+${vectorRule}
 
-Keywords (Tags): Provide 40-50 highly relevant keywords separated by commas. Include literal objects, background details, color tones, emotional states/expressions, camera angles (e.g., close-up, top-view), and specific use-cases (e.g., AI training data, computer vision, machine learning datasets).
+GENERATE THESE FIELDS:
 
-AI Training Value Note: Briefly explain what specific AI models (like object detection, emotion recognition, or texture mapping) can learn from this image.
+1. TITLE (single master title)
+   - EXACTLY between 100 and 200 characters. Never exceed 200.
+   - Start with a clear, compelling literal description of the main subject and action.
+   - Use the remaining space to embed high-volume long-tail keywords aligned with current microstock search trends.
+   - Plain text only: letters, numbers, spaces, commas, periods, hyphens. No emojis or special characters.
 
-RESPOND IN EXACT JSON FORMAT:
+2. SUGGESTED FILENAME
+   - Single lowercase, hyphen-separated string ending in .${safeFileType} (e.g., stack-of-pancakes-with-syrup.${safeFileType}).
+   - Reflect the asset format. No spaces, no underscores, no uppercase.
+
+3. KEYWORDS (auto-rank algorithm)
+   - Exactly 49 keywords or fewer — NEVER exceed 49.
+   - All lowercase. No special characters (letters, numbers, spaces, hyphens only).
+   - Strict ratio: ~70% single-word keywords, ~30% high-quality two-word phrases.
+   - Demand ranking: position the highest-demand, top-converting commercial search terms in the FIRST 10 keywords for maximum Shutterstock + Adobe Stock visibility.
+   - No duplicates, no stop-word-only phrases, no brand names unless visibly present.
+   - ${vectorRule}
+
+4. CATEGORY MAPPING
+   - adobeCategory: one official Adobe Stock category name.
+   - shutterstockCategory: one official Shutterstock category name.
+
+5. LEGAL / RIGHTS METADATA (always include verbatim)
+   - copyright: "Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved."
+   - rights: "Microstock Commercial License"
+   - author: "Microstock Contributor"
+
+OUTPUT FORMAT — return ONLY this JSON object, nothing else:
 {
   "filename": "suggested-filename.${safeFileType}",
-  "title": "Literal descriptive title under 200 chars",
-  "keywords": "keyword1, keyword2, ... (40-50 keywords)",
+  "title": "Master title between 100 and 200 characters",
+  "keywords": "keyword1, keyword2, ... (max 49, 70% single / 30% double-word, top demand first)",
   "adobeCategory": "Category Name",
   "shutterstockCategory": "Category Name",
-  "aiTrainingNote": "Brief AI training value note"
+  "copyright": "Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.",
+  "rights": "Microstock Commercial License",
+  "author": "Microstock Contributor"
 }`;
 
-    const defaultPrompt = `You are an expert microstock metadata generator for Adobe Stock and Shutterstock.
+    const dataModePrompt = `${masterSystemPrompt}
 
-${fileTypeContext}
+DATA-MODE ADDENDUM (AI training value):
+Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models (object detection, emotion recognition, texture mapping, etc.) can learn from this image. Append it to the JSON above. Still no prose outside the JSON object.`;
 
-Generate:
-1. Filename: Clean hyphenated filename (main-subject-action-context.${safeFileType})
-2. Title: STRICTLY under 195 characters. NO special characters (only letters, numbers, spaces, commas, periods, hyphens). First 5-7 words must be a clear sentence.
-3. EXACTLY 45 keywords, comma-separated, lowercase only, no special characters:
-   - Keywords 1-10: Most critical subjects
-   - Keywords 11-25: High-searched commercial terms
-   - Keywords 26-45: Mood, aesthetic terms${isVector ? ", 'vector', 'illustration', 'eps'" : ""}
-4. Categories for Adobe Stock and Shutterstock
-
-RESPOND IN EXACT JSON FORMAT:
-{
-  "filename": "suggested-filename.${safeFileType}",
-  "title": "Clear title under 195 chars no special characters",
-  "keywords": "keyword1, keyword2, ... (exactly 45 keywords)",
-  "adobeCategory": "Category Name",
-  "shutterstockCategory": "Category Name"
-}`;
-
-    let systemPrompt = mode === 'data' ? dataModePrompt : defaultPrompt;
+    let systemPrompt = mode === 'data' ? dataModePrompt : masterSystemPrompt;
     if (typeof customPrompt === 'string' && customPrompt.trim().length > 0 && customPrompt.length < 4000) {
       systemPrompt += `\n\nADDITIONAL USER INSTRUCTIONS (apply to title and keywords):\n${customPrompt.trim()}`;
     }
@@ -351,20 +363,30 @@ RESPOND IN EXACT JSON FORMAT:
           continue;
         }
         
-        // Sanitize title (max 195 chars, only alphanumeric + spaces, commas, periods, hyphens)
+        // Sanitize title (100-200 chars target, only alphanumeric + spaces, commas, periods, hyphens)
         const sanitizedTitle = (String(metadata.title || ''))
-          .replace(/[^a-zA-Z0-9\s,.\-]/g, '') // Strict: only letters, numbers, basic punctuation
+          .replace(/[^a-zA-Z0-9\s,.\-]/g, '')
           .replace(/\s+/g, ' ')
           .trim()
-          .slice(0, 195);
-        
-        // Sanitize keywords (max 45, only lowercase alphanumeric + spaces, hyphens - NO special chars)
+          .slice(0, 200);
+
+        // Sanitize keywords (max 49, lowercase alphanumeric + spaces + hyphens). De-dup preserves order.
+        const seen = new Set<string>();
         const sanitizedKeywords = (String(metadata.keywords || ''))
           .split(',')
           .map((k: string) => k.trim().toLowerCase().replace(/[^a-z0-9\s\-]/g, '').replace(/\s+/g, ' ').trim())
-          .filter((k: string) => k.length > 0 && k.length <= 50)
-          .slice(0, 45)
+          .filter((k: string) => {
+            if (!k || k.length > 50) return false;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          })
+          .slice(0, 49)
           .join(', ');
+
+        const LEGAL_COPYRIGHT = 'Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.';
+        const LEGAL_RIGHTS = 'Microstock Commercial License';
+        const LEGAL_AUTHOR = 'Microstock Contributor';
 
         console.log(`Metadata generated successfully using ${keyType} API`);
         return new Response(JSON.stringify({
@@ -373,6 +395,9 @@ RESPOND IN EXACT JSON FORMAT:
           keywords: sanitizedKeywords,
           adobeCategory: String(metadata.adobeCategory || 'Lifestyle'),
           shutterstockCategory: String(metadata.shutterstockCategory || 'Miscellaneous'),
+          copyright: LEGAL_COPYRIGHT,
+          rights: LEGAL_RIGHTS,
+          author: LEGAL_AUTHOR,
           aiTrainingNote: typeof metadata.aiTrainingNote === 'string' ? metadata.aiTrainingNote.slice(0, 1000) : undefined
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
