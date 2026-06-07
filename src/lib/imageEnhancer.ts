@@ -4,6 +4,7 @@ import { embedExifIntoJpeg } from './exifWriter';
 import { generateRawExif } from './exif';
 import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from './iptcXmpWriter';
 import { embedMetadataIntoPng } from './pngMetadataWriter';
+import { embedMetadataIntoEpsDataUrl } from './epsMetadataWriter';
 
 // Maximum dimensions to prevent memory issues
 const MAX_DIMENSION = 4000;
