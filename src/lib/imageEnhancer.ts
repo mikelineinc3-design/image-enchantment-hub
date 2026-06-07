@@ -275,9 +275,6 @@ export function embedIptcXmpMetadata(
     return embedMetadataIntoPng(dataUrl, xmpData);
   }
   if (format === 'eps') {
-    // Lazy import to avoid circular concerns
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { embedMetadataIntoEpsDataUrl } = require('./epsMetadataWriter') as typeof import('./epsMetadataWriter');
     return embedMetadataIntoEpsDataUrl(dataUrl, xmpData);
   }
   return embedXmpIntoJpeg(dataUrl, xmpData);
