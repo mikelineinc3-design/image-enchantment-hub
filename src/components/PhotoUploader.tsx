@@ -70,7 +70,7 @@ export function PhotoUploader({ onUpload, isDragging, setIsDragging }: PhotoUplo
             {isDragging ? 'Drop your photos here' : 'Drag & drop photos'}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            or click to browse • Supports JPG, PNG, WEBP
+            or click to browse • Supports JPG, PNG, WEBP, EPS
           </p>
         </div>
       </div>
