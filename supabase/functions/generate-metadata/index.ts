@@ -44,11 +44,14 @@ serve(async (req) => {
       });
     }
     
-    // Validate base64 format - must be a valid data URL
-    // Support various image formats including PNG with different mime type variations
+    // Validate base64 format - must be a valid data URL.
+    // Vector assets (EPS) arrive as application/postscript and are handled text-only below.
+    const isVectorPayload =
+      imageBase64.startsWith('data:application/postscript') ||
+      fileType === 'eps' || fileType === 'svg';
+
     const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
-    if (!dataUrlMatch) {
-      // Also check if it's a raw base64 without prefix (shouldn't happen but handle gracefully)
+    if (!dataUrlMatch && !isVectorPayload) {
       const hasBase64Content = imageBase64.length > 100 && imageBase64.includes(',');
       if (!hasBase64Content) {
         console.error('Invalid image data URL format:', imageBase64.substring(0, 100));
@@ -57,11 +60,11 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      // Try to use the image anyway if it has content after comma
       console.log('Non-standard data URL format, attempting to use anyway');
     }
-    
+
     const safeFileType = ALLOWED_FILE_TYPES.includes(fileType) ? fileType : 'jpg';
+
     
     // Collect API keys with their types — UNIFIED ROTATION POOL.
     // User-provided keys are tried first (any provider), then Lovable as last fallback.
