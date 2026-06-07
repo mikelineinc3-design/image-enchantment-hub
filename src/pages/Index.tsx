@@ -160,7 +160,55 @@ const Index = () => {
     
     console.log(`Starting enhancement for ${id}: format=${photo.imageFormat}, dataUrl length=${sourceDataUrl.length}`);
 
-    try {
+    // EPS files: skip pixel enhancement entirely. Just generate metadata
+    // from the filename (text-only) and embed it into the EPS bytes.
+    if (photo.imageFormat === 'eps') {
+      try {
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, status: 'generating-metadata' } : p
+        ));
+        const allKeys = getAllKeys();
+        console.log('[EPS] keys available', {
+          gemini: allKeys.gemini.length, openai: allKeys.openai.length, groq: allKeys.groq.length,
+        });
+        const metadata = await generateMicrostockMetadata(
+          sourceDataUrl, // EPS data URL; edge function will treat as text-only
+          'eps',
+          allKeys.openai.length > 0 ? allKeys.openai : undefined,
+          metadataMode,
+          (customPrompt ? customPrompt + '\n' : '') +
+            `The source asset is a vector EPS file named "${photo.file.name}". Infer the subject from the filename and produce vector-appropriate microstock metadata.`,
+          allKeys.groq.length > 0 ? allKeys.groq : undefined,
+          allKeys.gemini.length > 0 ? allKeys.gemini : undefined
+        );
+        const finalEps = embedIptcXmpMetadata(
+          sourceDataUrl,
+          metadata.title,
+          metadata.description,
+          metadata.keywords,
+          'eps'
+        );
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, enhancedPreview: finalEps, metadata, status: 'ready' } : p
+        ));
+        return true;
+      } catch (epsErr) {
+        const message = epsErr instanceof Error ? epsErr.message : 'EPS metadata generation failed';
+        console.error('EPS pipeline error:', epsErr);
+        toast.error(message);
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, status: 'error', error: message } : p
+        ));
+        return false;
+      } finally {
+        setEnhancingIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    }
+
       // Get original dimensions from raw exif or from the image
       const originalWidth = photo.rawExif.width || photo.originalExif.width || 0;
       const originalHeight = photo.rawExif.height || photo.originalExif.height || 0;
