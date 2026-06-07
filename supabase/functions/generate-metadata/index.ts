@@ -66,20 +66,22 @@ serve(async (req) => {
     // Collect API keys with their types — UNIFIED ROTATION POOL.
     // User-provided keys are tried first (any provider), then Lovable as last fallback.
     const apiKeys: ApiKeyEntry[] = [];
+    // Relaxed validation: providers issue keys of varying length and character sets.
+    // OpenAI project keys (sk-proj-...) can exceed 200 chars and include extra chars.
     const isValidKey = (k: unknown): k is string =>
-      typeof k === 'string' && k.length >= 20 && k.length <= 200 && /^[A-Za-z0-9_\-]+$/.test(k);
+      typeof k === 'string' && k.trim().length >= 20 && k.trim().length <= 500;
 
     // Gemini direct keys (Google AI Studio) — vision-capable
     if (geminiApiKeys && Array.isArray(geminiApiKeys)) {
-      for (const k of geminiApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'gemini' });
+      for (const k of geminiApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'gemini' });
     }
     // OpenAI keys — vision-capable (gpt-4o-mini)
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'openai' });
+      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openai' });
     }
     // Groq keys — vision-capable model used below
     if (groqApiKeys && Array.isArray(groqApiKeys)) {
-      for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'groq' });
+      for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
     }
 
     // Lovable AI Gateway as final fallback
@@ -262,41 +264,59 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
         }
 
         if (response.status === 429) {
-          console.log('Rate limited, trying next key...');
-          await response.text().catch(() => '');
+          const errBody = await response.text().catch(() => '');
+          console.log(`[${keyType}] 429:`, errBody.slice(0, 300));
+          // OpenAI returns insufficient_quota with 429 — treat as payment_required, non-retryable for this key.
+          const isQuota = /insufficient_quota|exceeded your current quota|billing/i.test(errBody);
           lastFailure = {
             provider: keyType,
-            status: 429,
-            code: 'rate_limited',
-            message: 'Metadata generation is rate limited. Try again later or add another API key.',
-            retryable: true,
+            status: isQuota ? 402 : 429,
+            code: isQuota ? 'payment_required' : 'rate_limited',
+            message: isQuota
+              ? `${keyType.toUpperCase()} quota exhausted. Add credits or use a different provider key.`
+              : 'Metadata generation is rate limited. Try again later or add another API key.',
+            retryable: !isQuota,
           };
           failures.push(lastFailure);
           continue;
         }
 
         if (response.status === 402) {
-          console.log('Payment required, trying next key...');
           await response.text().catch(() => '');
+          console.log(`[${keyType}] 402 payment required`);
           lastFailure = {
             provider: keyType,
             status: 402,
             code: 'payment_required',
-            message: 'Default AI credits are exhausted. Add an OpenAI or Groq API key in AI API Keys, or add AI credits, then try again.',
+            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, or Groq API key in AI API Keys, or add AI credits, then try again.',
             retryable: false,
           };
           failures.push(lastFailure);
           continue;
         }
 
-        if (response.status === 401) {
-          console.log('Invalid API key, trying next key...');
-          await response.text().catch(() => '');
+        // Gemini returns 400 for invalid API key (not 401); OpenAI/Groq use 401/403.
+        if (response.status === 401 || response.status === 403 || (keyType === 'gemini' && response.status === 400)) {
+          const errBody = await response.text().catch(() => '');
+          console.log(`[${keyType}] auth/key error ${response.status}:`, errBody.slice(0, 300));
+          // For Gemini 400, only treat as invalid key if message indicates so; otherwise treat as provider_error.
+          const isKeyError = response.status !== 400 || /API key|API_KEY_INVALID|permission|unauthor/i.test(errBody);
+          if (isKeyError) {
+            lastFailure = {
+              provider: keyType,
+              status: 401,
+              code: 'invalid_api_key',
+              message: `${keyType.toUpperCase()} API key is invalid or lacks permission. Remove it and add a valid key.`,
+              retryable: false,
+            };
+            failures.push(lastFailure);
+            continue;
+          }
           lastFailure = {
             provider: keyType,
-            status: 401,
-            code: 'invalid_api_key',
-            message: 'A metadata API key is invalid. Remove it and add a valid key, then try again.',
+            status: 400,
+            code: 'provider_error',
+            message: `${keyType.toUpperCase()} returned an error: ${errBody.slice(0, 200)}`,
             retryable: false,
           };
           failures.push(lastFailure);
@@ -304,13 +324,13 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
         }
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API error:", response.status, errorText);
+          const errorText = await response.text().catch(() => '');
+          console.error(`[${keyType}] API error ${response.status}:`, errorText.slice(0, 500));
           lastFailure = {
             provider: keyType,
             status: response.status >= 500 ? 503 : response.status,
             code: 'provider_error',
-            message: 'Metadata provider returned an error. Please try another API key or try again later.',
+            message: `${keyType.toUpperCase()} error (${response.status}). Trying next key if available.`,
             retryable: response.status >= 500,
           };
           failures.push(lastFailure);
