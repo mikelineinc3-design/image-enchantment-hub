@@ -77,11 +77,11 @@ serve(async (req) => {
     }
     // OpenAI keys — vision-capable (gpt-4o-mini)
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'openai' });
+      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openai' });
     }
     // Groq keys — vision-capable model used below
     if (groqApiKeys && Array.isArray(groqApiKeys)) {
-      for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'groq' });
+      for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
     }
 
     // Lovable AI Gateway as final fallback
