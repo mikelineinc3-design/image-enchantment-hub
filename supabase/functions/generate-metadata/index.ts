@@ -174,71 +174,73 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
         console.log(`Trying ${keyType} API key ${i + 1}/${apiKeys.length}`);
         
         let response: Response;
-        
+
+        // For vector assets (EPS/SVG), the model cannot see pixels. Build a
+        // text-only user message so providers don't reject the image_url payload.
+        const vectorUserText = `Generate microstock metadata for a VECTOR ${safeFileType.toUpperCase()} asset. ${customPrompt ? customPrompt + ' ' : ''}Respond with the required JSON only.`;
+        const rasterUserTextOpenAI = "Analyze this image and generate optimized metadata for microstock submission.";
+        const rasterUserTextGroq = "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only.";
+
         if (keyType === 'openai') {
-          // Direct OpenAI API call
           response = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: "gpt-4o-mini",
               messages: [
                 { role: "system", content: systemPrompt },
-                {
-                  role: "user",
-                  content: [
-                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
-                    { type: "image_url", image_url: { url: imageBase64 } }
-                  ]
-                }
+                isVectorPayload
+                  ? { role: "user", content: vectorUserText }
+                  : {
+                      role: "user",
+                      content: [
+                        { type: "text", text: rasterUserTextOpenAI },
+                        { type: "image_url", image_url: { url: imageBase64 } }
+                      ]
+                    }
               ],
               max_tokens: 1000
             }),
           });
         } else if (keyType === 'groq') {
-          // Groq vision-capable model. Pass the actual image so the model
-          // sees the pixels instead of hallucinating from the prompt alone.
           response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "meta-llama/llama-4-scout-17b-16e-instruct",
+              model: isVectorPayload
+                ? "llama-3.3-70b-versatile"
+                : "meta-llama/llama-4-scout-17b-16e-instruct",
               messages: [
                 { role: "system", content: systemPrompt },
-                {
-                  role: "user",
-                  content: [
-                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only." },
-                    { type: "image_url", image_url: { url: imageBase64 } }
-                  ]
-                }
+                isVectorPayload
+                  ? { role: "user", content: vectorUserText }
+                  : {
+                      role: "user",
+                      content: [
+                        { type: "text", text: rasterUserTextGroq },
+                        { type: "image_url", image_url: { url: imageBase64 } }
+                      ]
+                    }
               ],
               max_tokens: 1500,
               response_format: { type: "json_object" }
             }),
           });
         } else if (keyType === 'gemini') {
-          // Direct Google Generative Language API (vision-capable).
           const base64Match = imageBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
           const mimeType = base64Match?.[1] || 'image/jpeg';
           const rawBase64 = base64Match?.[2] || imageBase64.split(',').pop() || '';
+          const parts: Array<Record<string, unknown>> = [
+            { text: `${systemPrompt}\n\n${isVectorPayload ? vectorUserText : 'Analyze the attached image and respond with the required JSON only.'}` }
+          ];
+          if (!isVectorPayload) {
+            parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
+          }
           response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{
-                role: "user",
-                parts: [
-                  { text: `${systemPrompt}\n\nAnalyze the attached image and respond with the required JSON only.` },
-                  { inline_data: { mime_type: mimeType, data: rawBase64 } }
-                ]
-              }],
+              contents: [{ role: "user", parts }],
               generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
             }),
           });
@@ -246,25 +248,25 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           // Lovable AI Gateway
           response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: "google/gemini-2.5-flash",
               messages: [
                 { role: "system", content: systemPrompt },
-                {
-                  role: "user",
-                  content: [
-                    { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
-                    { type: "image_url", image_url: { url: imageBase64 } }
-                  ]
-                }
+                isVectorPayload
+                  ? { role: "user", content: vectorUserText }
+                  : {
+                      role: "user",
+                      content: [
+                        { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
+                        { type: "image_url", image_url: { url: imageBase64 } }
+                      ]
+                    }
               ]
             }),
           });
         }
+
 
         if (response.status === 429) {
           const errBody = await response.text().catch(() => '');
