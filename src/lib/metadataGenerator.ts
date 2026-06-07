@@ -46,6 +46,14 @@ export async function generateMicrostockMetadata(
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
+      console.log('[metadataGenerator] invoke', {
+        fileType,
+        mode,
+        openaiKeys: customApiKeys?.length || 0,
+        groqKeys: groqApiKeys?.length || 0,
+        geminiKeys: geminiApiKeys?.length || 0,
+        imageBase64Prefix: imageDataUrl.slice(0, 40),
+      });
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
         body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys }
       });
