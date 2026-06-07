@@ -489,15 +489,14 @@ function getCombinedFilterSettings(filters: FilterType[]) {
 
 // Detect image format from file or data URL
 export function detectImageFormat(file: File): ImageFormat {
-  if (file.type === 'image/png') {
-    return 'png';
-  }
+  const name = file.name.toLowerCase();
+  if (file.type === 'application/postscript' || name.endsWith('.eps')) return 'eps';
+  if (file.type === 'image/png') return 'png';
   return 'jpeg';
 }
 
 export function detectFormatFromDataUrl(dataUrl: string): ImageFormat {
-  if (dataUrl.startsWith('data:image/png')) {
-    return 'png';
-  }
+  if (dataUrl.startsWith('data:application/postscript')) return 'eps';
+  if (dataUrl.startsWith('data:image/png')) return 'png';
   return 'jpeg';
 }
