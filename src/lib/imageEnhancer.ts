@@ -252,7 +252,7 @@ export function validateImageDataUrl(dataUrl: string): boolean {
   return commaIndex > 0 && dataUrl.length - commaIndex > 50;
 }
 
-// Embed IPTC/XMP metadata for microstock compatibility (JPEG + PNG)
+// Embed IPTC/XMP metadata for microstock compatibility (JPEG + PNG + EPS)
 export function embedIptcXmpMetadata(
   dataUrl: string,
   title: string,
@@ -272,6 +272,12 @@ export function embedIptcXmpMetadata(
 
   if (format === 'png') {
     return embedMetadataIntoPng(dataUrl, xmpData);
+  }
+  if (format === 'eps') {
+    // Lazy import to avoid circular concerns
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { embedMetadataIntoEpsDataUrl } = require('./epsMetadataWriter') as typeof import('./epsMetadataWriter');
+    return embedMetadataIntoEpsDataUrl(dataUrl, xmpData);
   }
   return embedXmpIntoJpeg(dataUrl, xmpData);
 }
