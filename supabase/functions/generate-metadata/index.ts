@@ -66,12 +66,14 @@ serve(async (req) => {
     // Collect API keys with their types — UNIFIED ROTATION POOL.
     // User-provided keys are tried first (any provider), then Lovable as last fallback.
     const apiKeys: ApiKeyEntry[] = [];
+    // Relaxed validation: providers issue keys of varying length and character sets.
+    // OpenAI project keys (sk-proj-...) can exceed 200 chars and include extra chars.
     const isValidKey = (k: unknown): k is string =>
-      typeof k === 'string' && k.length >= 20 && k.length <= 200 && /^[A-Za-z0-9_\-]+$/.test(k);
+      typeof k === 'string' && k.trim().length >= 20 && k.trim().length <= 500;
 
     // Gemini direct keys (Google AI Studio) — vision-capable
     if (geminiApiKeys && Array.isArray(geminiApiKeys)) {
-      for (const k of geminiApiKeys) if (isValidKey(k)) apiKeys.push({ key: k, type: 'gemini' });
+      for (const k of geminiApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'gemini' });
     }
     // OpenAI keys — vision-capable (gpt-4o-mini)
     if (customApiKeys && Array.isArray(customApiKeys)) {
