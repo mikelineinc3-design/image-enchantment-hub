@@ -245,9 +245,9 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
 export function validateImageDataUrl(dataUrl: string): boolean {
   if (!dataUrl || typeof dataUrl !== 'string') return false;
   if (dataUrl.length < 100) return false;
-  if (!dataUrl.startsWith('data:image/')) return false;
+  // Accept image/* AND application/postscript (EPS)
+  if (!dataUrl.startsWith('data:image/') && !dataUrl.startsWith('data:application/postscript')) return false;
   if (!dataUrl.includes(',')) return false;
-  // Check that there's actual content after the comma
   const commaIndex = dataUrl.indexOf(',');
   return commaIndex > 0 && dataUrl.length - commaIndex > 50;
 }
