@@ -47,7 +47,7 @@ export function PhotoUploader({ onUpload, isDragging, setIsDragging }: PhotoUplo
     >
       <input
         type="file"
-        accept="image/*"
+        accept="image/*,.eps,application/postscript"
         multiple
         onChange={handleFileInput}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
