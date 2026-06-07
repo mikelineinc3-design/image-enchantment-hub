@@ -171,7 +171,7 @@ export function fileToDataUrl(file: File): Promise<string> {
     reader.onload = () => {
       const result = reader.result as string;
       // Validate the result is a proper data URL
-      if (!result || !result.startsWith('data:image/') || result.length < 100) {
+      if (!result || !result.startsWith('data:') || result.length < 100) {
         reject(new Error('File conversion produced invalid data URL'));
         return;
       }

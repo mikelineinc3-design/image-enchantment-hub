@@ -4,6 +4,7 @@ import { embedExifIntoJpeg } from './exifWriter';
 import { generateRawExif } from './exif';
 import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from './iptcXmpWriter';
 import { embedMetadataIntoPng } from './pngMetadataWriter';
+import { embedMetadataIntoEpsDataUrl } from './epsMetadataWriter';
 
 // Maximum dimensions to prevent memory issues
 const MAX_DIMENSION = 4000;
@@ -245,14 +246,14 @@ async function resizeToTarget(dataUrl: string, targetWidth: number, targetHeight
 export function validateImageDataUrl(dataUrl: string): boolean {
   if (!dataUrl || typeof dataUrl !== 'string') return false;
   if (dataUrl.length < 100) return false;
-  if (!dataUrl.startsWith('data:image/')) return false;
+  // Accept image/* AND application/postscript (EPS)
+  if (!dataUrl.startsWith('data:image/') && !dataUrl.startsWith('data:application/postscript')) return false;
   if (!dataUrl.includes(',')) return false;
-  // Check that there's actual content after the comma
   const commaIndex = dataUrl.indexOf(',');
   return commaIndex > 0 && dataUrl.length - commaIndex > 50;
 }
 
-// Embed IPTC/XMP metadata for microstock compatibility (JPEG + PNG)
+// Embed IPTC/XMP metadata for microstock compatibility (JPEG + PNG + EPS)
 export function embedIptcXmpMetadata(
   dataUrl: string,
   title: string,
@@ -272,6 +273,9 @@ export function embedIptcXmpMetadata(
 
   if (format === 'png') {
     return embedMetadataIntoPng(dataUrl, xmpData);
+  }
+  if (format === 'eps') {
+    return embedMetadataIntoEpsDataUrl(dataUrl, xmpData);
   }
   return embedXmpIntoJpeg(dataUrl, xmpData);
 }
@@ -485,15 +489,14 @@ function getCombinedFilterSettings(filters: FilterType[]) {
 
 // Detect image format from file or data URL
 export function detectImageFormat(file: File): ImageFormat {
-  if (file.type === 'image/png') {
-    return 'png';
-  }
+  const name = file.name.toLowerCase();
+  if (file.type === 'application/postscript' || name.endsWith('.eps')) return 'eps';
+  if (file.type === 'image/png') return 'png';
   return 'jpeg';
 }
 
 export function detectFormatFromDataUrl(dataUrl: string): ImageFormat {
-  if (dataUrl.startsWith('data:image/png')) {
-    return 'png';
-  }
+  if (dataUrl.startsWith('data:application/postscript')) return 'eps';
+  if (dataUrl.startsWith('data:image/png')) return 'png';
   return 'jpeg';
 }

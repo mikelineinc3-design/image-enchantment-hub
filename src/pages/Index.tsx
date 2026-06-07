@@ -40,10 +40,15 @@ const Index = () => {
     photos.some(p => p.status === 'enhancing' || p.status === 'generating-metadata') ? 3 : 2;
 
   const handleUpload = useCallback(async (files: FileList) => {
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-    
+    const isAcceptedFile = (f: File) =>
+      f.type.startsWith('image/') ||
+      f.type === 'application/postscript' ||
+      f.name.toLowerCase().endsWith('.eps');
+
+    const imageFiles = Array.from(files).filter(isAcceptedFile);
+
     if (imageFiles.length === 0) {
-      toast.error('Please upload image files only');
+      toast.error('Please upload image or EPS files only');
       return;
     }
 
@@ -56,9 +61,14 @@ const Index = () => {
     for (const batch of uploadBatches) {
       await Promise.all(batch.map(async (file) => {
         const id = generateId();
-        const preview = URL.createObjectURL(file);
         const imageFormat = detectImageFormat(file);
-        
+        // EPS can't be previewed by the browser — use a generic vector placeholder.
+        const preview = imageFormat === 'eps'
+          ? 'data:image/svg+xml;utf8,' + encodeURIComponent(
+              '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%23111"/><text x="50%" y="50%" font-family="sans-serif" font-size="42" fill="%23bbb" text-anchor="middle" dominant-baseline="middle">Vector EPS</text></svg>'
+            )
+          : URL.createObjectURL(file);
+
         const newPhoto: PhotoFile = {
           id,
           file,
@@ -69,43 +79,54 @@ const Index = () => {
           enhancedExif: {},
           status: 'extracting',
           selectedFilters: batchFilters,
-          fileType: batchFileType,
+          fileType: imageFormat === 'eps' ? 'eps' : batchFileType,
           imageFormat,
         };
 
         setPhotos(prev => [...prev, newPhoto]);
 
         try {
+          if (imageFormat === 'eps') {
+            // EPS has no EXIF — just read the file as a data URL for later embedding.
+            const dataUrl = await fileToDataUrl(file);
+            setPhotos(prev => prev.map(p =>
+              p.id === id
+                ? { ...p, originalDataUrl: dataUrl, status: 'uploaded' }
+                : p
+            ));
+            return;
+          }
+
           const [exifResult, dataUrl] = await Promise.all([
             extractExif(file),
             fileToDataUrl(file)
           ]);
-          
+
           const enhanced = generateAiExif(exifResult.display);
-          
-          setPhotos(prev => prev.map(p => 
-            p.id === id 
-              ? { 
-                  ...p, 
-                  originalExif: exifResult.display, 
+
+          setPhotos(prev => prev.map(p =>
+            p.id === id
+              ? {
+                  ...p,
+                  originalExif: exifResult.display,
                   rawExif: exifResult.raw,
-                  enhancedExif: enhanced, 
+                  enhancedExif: enhanced,
                   originalDataUrl: dataUrl,
-                  status: 'uploaded' 
+                  status: 'uploaded'
                 }
               : p
           ));
         } catch (error) {
-          setPhotos(prev => prev.map(p => 
-            p.id === id 
+          setPhotos(prev => prev.map(p =>
+            p.id === id
               ? { ...p, status: 'error', error: 'Failed to extract EXIF' }
               : p
           ));
         }
       }));
     }
-    
-    toast.success(`${imageFiles.length} photos uploaded`);
+
+    toast.success(`${imageFiles.length} files uploaded`);
   }, [batchFilters, batchFileType]);
 
   const handleEnhance = useCallback(async (id: string): Promise<boolean> => {
@@ -138,6 +159,55 @@ const Index = () => {
     }
     
     console.log(`Starting enhancement for ${id}: format=${photo.imageFormat}, dataUrl length=${sourceDataUrl.length}`);
+
+    // EPS files: skip pixel enhancement entirely. Just generate metadata
+    // from the filename (text-only) and embed it into the EPS bytes.
+    if (photo.imageFormat === 'eps') {
+      try {
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, status: 'generating-metadata' } : p
+        ));
+        const allKeys = getAllKeys();
+        console.log('[EPS] keys available', {
+          gemini: allKeys.gemini.length, openai: allKeys.openai.length, groq: allKeys.groq.length,
+        });
+        const metadata = await generateMicrostockMetadata(
+          sourceDataUrl, // EPS data URL; edge function will treat as text-only
+          'eps',
+          allKeys.openai.length > 0 ? allKeys.openai : undefined,
+          metadataMode,
+          (customPrompt ? customPrompt + '\n' : '') +
+            `The source asset is a vector EPS file named "${photo.file.name}". Infer the subject from the filename and produce vector-appropriate microstock metadata.`,
+          allKeys.groq.length > 0 ? allKeys.groq : undefined,
+          allKeys.gemini.length > 0 ? allKeys.gemini : undefined
+        );
+        const finalEps = embedIptcXmpMetadata(
+          sourceDataUrl,
+          metadata.title,
+          metadata.description,
+          metadata.keywords,
+          'eps'
+        );
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, enhancedPreview: finalEps, metadata, status: 'ready' } : p
+        ));
+        return true;
+      } catch (epsErr) {
+        const message = epsErr instanceof Error ? epsErr.message : 'EPS metadata generation failed';
+        console.error('EPS pipeline error:', epsErr);
+        toast.error(message);
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, status: 'error', error: message } : p
+        ));
+        return false;
+      } finally {
+        setEnhancingIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    }
 
     try {
       // Get original dimensions from raw exif or from the image

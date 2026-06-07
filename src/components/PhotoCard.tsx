@@ -42,19 +42,22 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTy
     link.href = URL.createObjectURL(blob);
     
     // Use correct extension based on image format
-    const ext = photo.imageFormat === 'png' ? 'png' : 'jpg';
-    const baseName = photo.metadata?.filename?.replace(/\.[^/.]+$/, '') || 
+    const ext = photo.imageFormat === 'png' ? 'png' : photo.imageFormat === 'eps' ? 'eps' : 'jpg';
+    const baseName = photo.metadata?.filename?.replace(/\.[^/.]+$/, '') ||
       photo.file.name.replace(/\.[^/.]+$/, '') + '_enhanced';
     const filename = `${baseName}.${ext}`;
-    
+
     link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
-    
-    const metadataNote = photo.imageFormat === 'png' ? '' : ' with embedded EXIF data';
-    toast.success(`Photo downloaded${metadataNote}!`);
+
+    const metadataNote =
+      photo.imageFormat === 'png' ? '' :
+      photo.imageFormat === 'eps' ? ' with embedded XMP/PostScript metadata' :
+      ' with embedded EXIF data';
+    toast.success(`File downloaded${metadataNote}!`);
   };
 
   const statusIcon = {
