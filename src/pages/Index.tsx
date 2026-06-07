@@ -209,6 +209,7 @@ const Index = () => {
       }
     }
 
+    try {
       // Get original dimensions from raw exif or from the image
       const originalWidth = photo.rawExif.width || photo.originalExif.width || 0;
       const originalHeight = photo.rawExif.height || photo.originalExif.height || 0;
