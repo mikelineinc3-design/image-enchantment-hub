@@ -271,11 +271,22 @@ const Index = () => {
           }
         }
       }
-      
+
+      // FP mode: force JPG output ≥ 2MB (convert PNG → JPG, upscale until size threshold met)
+      let outputFormat: ImageFormat = photo.imageFormat;
+      if (fpMode && photo.imageFormat !== 'eps') {
+        try {
+          enhancedDataUrl = await ensureJpegMinSize(enhancedDataUrl, 2 * 1024 * 1024);
+          outputFormat = 'jpeg';
+        } catch (fpErr) {
+          console.warn('FP processing failed, continuing with original output:', fpErr);
+        }
+      }
+
       // Update with enhanced image
-      setPhotos(prev => prev.map(p => 
-        p.id === id 
-          ? { ...p, enhancedPreview: enhancedDataUrl, status: 'generating-metadata' }
+      setPhotos(prev => prev.map(p =>
+        p.id === id
+          ? { ...p, enhancedPreview: enhancedDataUrl, imageFormat: outputFormat, fileType: outputFormat === 'jpeg' && p.fileType === 'png' ? 'jpg' : p.fileType, status: 'generating-metadata' }
           : p
       ));
       
