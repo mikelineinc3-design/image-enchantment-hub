@@ -274,7 +274,7 @@ const Index = () => {
 
       // FP mode: force JPG output ≥ 2MB (convert PNG → JPG, upscale until size threshold met)
       let outputFormat: ImageFormat = photo.imageFormat;
-      if (fpMode && photo.imageFormat !== 'eps') {
+      if (fpMode) {
         try {
           enhancedDataUrl = await ensureJpegMinSize(enhancedDataUrl, 2 * 1024 * 1024);
           outputFormat = 'jpeg';
