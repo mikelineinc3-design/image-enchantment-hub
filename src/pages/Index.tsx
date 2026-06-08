@@ -8,6 +8,7 @@ import { ApiKeyManager } from '@/components/ApiKeyManager';
 import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode, UpscaleTarget } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
+import { ensureJpegMinSize } from '@/lib/fpInflater';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { downloadCSV } from '@/lib/csvExporter';
@@ -31,6 +32,7 @@ const Index = () => {
   const [upscaleTarget, setUpscaleTarget] = useState<UpscaleTarget>('none');
   const [metadataMode, setMetadataMode] = useState<MetadataMode>('default');
   const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [fpMode, setFpMode] = useState<boolean>(false);
   const processingRef = useRef<boolean>(false);
   
   const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
@@ -269,11 +271,22 @@ const Index = () => {
           }
         }
       }
-      
+
+      // FP mode: force JPG output ≥ 2MB (convert PNG → JPG, upscale until size threshold met)
+      let outputFormat: ImageFormat = photo.imageFormat;
+      if (fpMode) {
+        try {
+          enhancedDataUrl = await ensureJpegMinSize(enhancedDataUrl, 2 * 1024 * 1024);
+          outputFormat = 'jpeg';
+        } catch (fpErr) {
+          console.warn('FP processing failed, continuing with original output:', fpErr);
+        }
+      }
+
       // Update with enhanced image
-      setPhotos(prev => prev.map(p => 
-        p.id === id 
-          ? { ...p, enhancedPreview: enhancedDataUrl, status: 'generating-metadata' }
+      setPhotos(prev => prev.map(p =>
+        p.id === id
+          ? { ...p, enhancedPreview: enhancedDataUrl, imageFormat: outputFormat, fileType: outputFormat === 'jpeg' && p.fileType === 'png' ? 'jpg' : p.fileType, status: 'generating-metadata' }
           : p
       ));
       
@@ -307,7 +320,7 @@ const Index = () => {
           metadata.title,
           metadata.description,
           metadata.keywords,
-          photo.imageFormat
+          outputFormat
         );
         
         setPhotos(prev => prev.map(p => 
@@ -342,7 +355,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt]);
+  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt, fpMode]);
 
   const handleEnhanceAll = useCallback(async () => {
     if (processingRef.current) {
@@ -489,11 +502,13 @@ const Index = () => {
           upscaleTarget={upscaleTarget}
           metadataMode={metadataMode}
           customPrompt={customPrompt}
+          fpMode={fpMode}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}
           onUpscaleTargetChange={setUpscaleTarget}
           onMetadataModeChange={setMetadataMode}
           onCustomPromptChange={setCustomPrompt}
+          onFpModeChange={setFpMode}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
           onDownloadCSV={() => downloadCSV(photos.filter(p => p.status === 'ready' && p.metadata))}
