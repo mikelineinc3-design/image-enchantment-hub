@@ -4,7 +4,7 @@ import { FileTypeSelector } from './FileTypeSelector';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Download, Loader2, Database, FileText, FileSpreadsheet } from 'lucide-react';
+import { Sparkles, Download, Loader2, Database, FileText, FileSpreadsheet, Maximize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface BatchActionsProps {
