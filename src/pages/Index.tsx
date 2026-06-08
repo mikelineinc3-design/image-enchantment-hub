@@ -502,11 +502,13 @@ const Index = () => {
           upscaleTarget={upscaleTarget}
           metadataMode={metadataMode}
           customPrompt={customPrompt}
+          fpMode={fpMode}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}
           onUpscaleTargetChange={setUpscaleTarget}
           onMetadataModeChange={setMetadataMode}
           onCustomPromptChange={setCustomPrompt}
+          onFpModeChange={setFpMode}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
           onDownloadCSV={() => downloadCSV(photos.filter(p => p.status === 'ready' && p.metadata))}
