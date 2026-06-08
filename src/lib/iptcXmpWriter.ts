@@ -168,16 +168,16 @@ export function embedXmpIntoJpeg(jpegDataUrl: string, xmpData: IptcXmpData): str
 }
 
 // Sanitize title for microstock (100-200 chars target, only letters, numbers, spaces, commas, periods, hyphens)
-export function sanitizeTitle(title: string): string {
+export function sanitizeTitle(title: string, maxLength = 200): string {
   return title
     .replace(/[^a-zA-Z0-9\s,.\-]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 200);
+    .slice(0, maxLength);
 }
 
-// Sanitize keywords (max 49 keywords, only letters, numbers, spaces, hyphens - NO special characters)
-export function sanitizeKeywords(keywords: string): string[] {
+// Sanitize keywords (max 49 keywords by default, only letters, numbers, spaces, hyphens - NO special characters)
+export function sanitizeKeywords(keywords: string, maxCount = 49): string[] {
   const seen = new Set<string>();
   return keywords
     .split(',')
@@ -194,5 +194,5 @@ export function sanitizeKeywords(keywords: string): string[] {
       seen.add(k);
       return true;
     })
-    .slice(0, 49);
+    .slice(0, maxCount);
 }
