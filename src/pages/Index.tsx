@@ -8,6 +8,7 @@ import { ApiKeyManager } from '@/components/ApiKeyManager';
 import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode, UpscaleTarget } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
+import { ensureJpegMinSize } from '@/lib/fpInflater';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { downloadCSV } from '@/lib/csvExporter';
@@ -31,6 +32,7 @@ const Index = () => {
   const [upscaleTarget, setUpscaleTarget] = useState<UpscaleTarget>('none');
   const [metadataMode, setMetadataMode] = useState<MetadataMode>('default');
   const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [fpMode, setFpMode] = useState<boolean>(false);
   const processingRef = useRef<boolean>(false);
   
   const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
