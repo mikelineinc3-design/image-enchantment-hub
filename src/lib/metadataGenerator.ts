@@ -39,7 +39,8 @@ export async function generateMicrostockMetadata(
   mode: MetadataMode = 'default',
   customPrompt?: string,
   groqApiKeys?: string[],
-  geminiApiKeys?: string[]
+  geminiApiKeys?: string[],
+  fpMode = false
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
   let lastErrorCode: string | undefined;
