@@ -15,11 +15,13 @@ interface BatchActionsProps {
   upscaleTarget: UpscaleTarget;
   metadataMode: MetadataMode;
   customPrompt: string;
+  fpMode: boolean;
   onFilterChange: (filters: FilterType[]) => void;
   onFileTypeChange: (fileType: FileType) => void;
   onUpscaleTargetChange: (target: UpscaleTarget) => void;
   onMetadataModeChange: (mode: MetadataMode) => void;
   onCustomPromptChange: (prompt: string) => void;
+  onFpModeChange: (enabled: boolean) => void;
   onEnhanceAll: () => void;
   onDownloadAll: () => void;
   onDownloadCSV: () => void;
