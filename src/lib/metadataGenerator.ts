@@ -77,8 +77,8 @@ export async function generateMicrostockMetadata(
         throw lastError;
       }
 
-      const sanitizedTitle = sanitizeTitle(data.title || '');
-      const sanitizedKeywords = sanitizeKeywords(data.keywords || '').join(', ');
+      const sanitizedTitle = sanitizeTitle(data.title || '', fpMode ? 99 : 200);
+      const sanitizedKeywords = sanitizeKeywords(data.keywords || '', fpMode ? 48 : 49).join(', ');
 
       return {
         filename: data.filename || '',
