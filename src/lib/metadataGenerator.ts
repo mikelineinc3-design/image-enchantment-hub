@@ -39,7 +39,8 @@ export async function generateMicrostockMetadata(
   mode: MetadataMode = 'default',
   customPrompt?: string,
   groqApiKeys?: string[],
-  geminiApiKeys?: string[]
+  geminiApiKeys?: string[],
+  fpMode = false
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
   let lastErrorCode: string | undefined;
@@ -55,7 +56,7 @@ export async function generateMicrostockMetadata(
         imageBase64Prefix: imageDataUrl.slice(0, 40),
       });
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys }
+        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode }
       });
 
       if (error) {
@@ -76,8 +77,8 @@ export async function generateMicrostockMetadata(
         throw lastError;
       }
 
-      const sanitizedTitle = sanitizeTitle(data.title || '');
-      const sanitizedKeywords = sanitizeKeywords(data.keywords || '').join(', ');
+      const sanitizedTitle = sanitizeTitle(data.title || '', fpMode ? 99 : 200);
+      const sanitizedKeywords = sanitizeKeywords(data.keywords || '', fpMode ? 48 : 49).join(', ');
 
       return {
         filename: data.filename || '',
