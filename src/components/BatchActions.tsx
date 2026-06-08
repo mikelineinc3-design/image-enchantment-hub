@@ -101,6 +101,25 @@ export function BatchActions({
               </Label>
             </div>
           </div>
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">FP Mode (force JPG ≥ 2MB):</span>
+            <div className="flex items-center gap-2 h-9">
+              <Button
+                type="button"
+                size="sm"
+                variant={fpMode ? 'default' : 'outline'}
+                disabled={isEnhancing}
+                onClick={() => onFpModeChange(!fpMode)}
+                className={cn(fpMode && 'gradient-primary text-primary-foreground')}
+              >
+                <Maximize2 className="w-4 h-4" />
+                FP
+              </Button>
+              <Label className="text-xs text-muted-foreground ml-1">
+                {fpMode ? 'JPG ≥ 2MB' : 'Off'}
+              </Label>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
