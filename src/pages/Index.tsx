@@ -312,7 +312,8 @@ const Index = () => {
           metadataMode,
           customPrompt,
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
-          allKeys.gemini.length > 0 ? allKeys.gemini : undefined
+          allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
+          fpMode
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
