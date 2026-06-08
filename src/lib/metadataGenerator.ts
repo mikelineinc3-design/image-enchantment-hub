@@ -56,7 +56,7 @@ export async function generateMicrostockMetadata(
         imageBase64Prefix: imageDataUrl.slice(0, 40),
       });
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys }
+        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode }
       });
 
       if (error) {
