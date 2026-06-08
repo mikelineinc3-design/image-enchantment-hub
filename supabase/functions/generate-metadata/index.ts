@@ -392,14 +392,14 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           continue;
         }
         
-        // Sanitize title (100-200 chars target, only alphanumeric + spaces, commas, periods, hyphens)
+        // Sanitize title (respect FP-mode limits if active)
         const sanitizedTitle = (String(metadata.title || ''))
           .replace(/[^a-zA-Z0-9\s,.\-]/g, '')
           .replace(/\s+/g, ' ')
           .trim()
-          .slice(0, 200);
+          .slice(0, titleLimit);
 
-        // Sanitize keywords (max 49, lowercase alphanumeric + spaces + hyphens). De-dup preserves order.
+        // Sanitize keywords (respect FP-mode limits if active)
         const seen = new Set<string>();
         const sanitizedKeywords = (String(metadata.keywords || ''))
           .split(',')
@@ -410,7 +410,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             seen.add(k);
             return true;
           })
-          .slice(0, 49)
+          .slice(0, keywordsLimit)
           .join(', ');
 
         const LEGAL_COPYRIGHT = 'Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.';
