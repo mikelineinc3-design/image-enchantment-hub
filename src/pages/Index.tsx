@@ -181,7 +181,8 @@ const Index = () => {
           (customPrompt ? customPrompt + '\n' : '') +
             `The source asset is a vector EPS file named "${photo.file.name}". Infer the subject from the filename and produce vector-appropriate microstock metadata.`,
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
-          allKeys.gemini.length > 0 ? allKeys.gemini : undefined
+          allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
+          fpMode
         );
         const finalEps = embedIptcXmpMetadata(
           sourceDataUrl,
