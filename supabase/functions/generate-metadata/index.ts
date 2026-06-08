@@ -107,6 +107,10 @@ serve(async (req) => {
       ? "Include vector-specific keywords (vector, eps, illustration, clipart, graphic design) where they genuinely fit."
       : "STRICTLY DO NOT include 'vector', 'eps', 'illustration', or 'clipart' keywords — this is a raster photograph.";
 
+    const titleLimit = fpMode ? 99 : 200;
+    const titleMin = fpMode ? 50 : 100;
+    const keywordsLimit = fpMode ? 48 : 49;
+
     const masterSystemPrompt = `You are an automated microstock metadata engine for Adobe Stock and Shutterstock. Output ONLY a single strict JSON object — no prose, no greetings, no markdown, no code fences.
 
 ACTIVE ASSET FORMAT: ${assetFormatLabel}
@@ -115,7 +119,7 @@ ${vectorRule}
 GENERATE THESE FIELDS:
 
 1. TITLE (single master title)
-   - EXACTLY between 100 and 200 characters. Never exceed 200.
+   - EXACTLY between ${titleMin} and ${titleLimit} characters. Never exceed ${titleLimit}.
    - Start with a clear, compelling literal description of the main subject and action.
    - Use the remaining space to embed high-volume long-tail keywords aligned with current microstock search trends.
    - Plain text only: letters, numbers, spaces, commas, periods, hyphens. No emojis or special characters.
@@ -125,7 +129,7 @@ GENERATE THESE FIELDS:
    - Reflect the asset format. No spaces, no underscores, no uppercase.
 
 3. KEYWORDS (auto-rank algorithm)
-   - Exactly 49 keywords or fewer — NEVER exceed 49.
+   - Exactly ${keywordsLimit} keywords or fewer — NEVER exceed ${keywordsLimit}.
    - All lowercase. No special characters (letters, numbers, spaces, hyphens only).
    - Strict ratio: ~70% single-word keywords, ~30% high-quality two-word phrases.
    - Demand ranking: position the highest-demand, top-converting commercial search terms in the FIRST 10 keywords for maximum Shutterstock + Adobe Stock visibility.
@@ -144,8 +148,8 @@ GENERATE THESE FIELDS:
 OUTPUT FORMAT — return ONLY this JSON object, nothing else:
 {
   "filename": "suggested-filename.${safeFileType}",
-  "title": "Master title between 100 and 200 characters",
-  "keywords": "keyword1, keyword2, ... (max 49, 70% single / 30% double-word, top demand first)",
+  "title": "Master title between ${titleMin} and ${titleLimit} characters",
+  "keywords": "keyword1, keyword2, ... (max ${keywordsLimit}, 70% single / 30% double-word, top demand first)",
   "adobeCategory": "Category Name",
   "shutterstockCategory": "Category Name",
   "copyright": "Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.",
