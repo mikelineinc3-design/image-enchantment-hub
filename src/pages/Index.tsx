@@ -320,7 +320,7 @@ const Index = () => {
           metadata.title,
           metadata.description,
           metadata.keywords,
-          photo.imageFormat
+          outputFormat
         );
         
         setPhotos(prev => prev.map(p => 
@@ -355,7 +355,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt]);
+  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt, fpMode]);
 
   const handleEnhanceAll = useCallback(async () => {
     if (processingRef.current) {
