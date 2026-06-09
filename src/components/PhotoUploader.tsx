@@ -47,7 +47,7 @@ export function PhotoUploader({ onUpload, isDragging, setIsDragging }: PhotoUplo
     >
       <input
         type="file"
-        accept="image/*,.eps,application/postscript"
+        accept="image/*,.eps,.svg,application/postscript,image/svg+xml"
         multiple
         onChange={handleFileInput}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -70,7 +70,7 @@ export function PhotoUploader({ onUpload, isDragging, setIsDragging }: PhotoUplo
             {isDragging ? 'Drop your photos here' : 'Drag & drop photos'}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            or click to browse • Supports JPG, PNG, WEBP, EPS
+            or click to browse • Supports JPG, PNG, WEBP, EPS, SVG
           </p>
         </div>
       </div>

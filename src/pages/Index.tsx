@@ -45,12 +45,14 @@ const Index = () => {
     const isAcceptedFile = (f: File) =>
       f.type.startsWith('image/') ||
       f.type === 'application/postscript' ||
-      f.name.toLowerCase().endsWith('.eps');
+      f.type === 'image/svg+xml' ||
+      f.name.toLowerCase().endsWith('.eps') ||
+      f.name.toLowerCase().endsWith('.svg');
 
     const imageFiles = Array.from(files).filter(isAcceptedFile);
 
     if (imageFiles.length === 0) {
-      toast.error('Please upload image or EPS files only');
+      toast.error('Please upload image, EPS, or SVG files only');
       return;
     }
 
@@ -64,7 +66,9 @@ const Index = () => {
       await Promise.all(batch.map(async (file) => {
         const id = generateId();
         const imageFormat = detectImageFormat(file);
+        const isVector = imageFormat === 'eps' || imageFormat === 'svg';
         // EPS can't be previewed by the browser — use a generic vector placeholder.
+        // SVG renders natively, so use an object URL.
         const preview = imageFormat === 'eps'
           ? 'data:image/svg+xml;utf8,' + encodeURIComponent(
               '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="640" height="360" fill="%23111"/><text x="50%" y="50%" font-family="sans-serif" font-size="42" fill="%23bbb" text-anchor="middle" dominant-baseline="middle">Vector EPS</text></svg>'
@@ -81,15 +85,15 @@ const Index = () => {
           enhancedExif: {},
           status: 'extracting',
           selectedFilters: batchFilters,
-          fileType: imageFormat === 'eps' ? 'eps' : batchFileType,
+          fileType: imageFormat === 'eps' ? 'eps' : imageFormat === 'svg' ? 'svg' : batchFileType,
           imageFormat,
         };
 
         setPhotos(prev => [...prev, newPhoto]);
 
         try {
-          if (imageFormat === 'eps') {
-            // EPS has no EXIF — just read the file as a data URL for later embedding.
+          if (isVector) {
+            // EPS/SVG have no EXIF — just read the file as a data URL for later embedding.
             const dataUrl = await fileToDataUrl(file);
             setPhotos(prev => prev.map(p =>
               p.id === id
@@ -162,42 +166,43 @@ const Index = () => {
     
     console.log(`Starting enhancement for ${id}: format=${photo.imageFormat}, dataUrl length=${sourceDataUrl.length}`);
 
-    // EPS files: skip pixel enhancement entirely. Just generate metadata
-    // from the filename (text-only) and embed it into the EPS bytes.
-    if (photo.imageFormat === 'eps') {
+    // EPS/SVG files: skip pixel enhancement entirely. Just generate metadata
+    // from the filename (text-only) and embed it into the file bytes.
+    if (photo.imageFormat === 'eps' || photo.imageFormat === 'svg') {
+      const vectorKind = photo.imageFormat.toUpperCase();
       try {
         setPhotos(prev => prev.map(p =>
           p.id === id ? { ...p, status: 'generating-metadata' } : p
         ));
         const allKeys = getAllKeys();
-        console.log('[EPS] keys available', {
+        console.log(`[${vectorKind}] keys available`, {
           gemini: allKeys.gemini.length, openai: allKeys.openai.length, groq: allKeys.groq.length,
         });
         const metadata = await generateMicrostockMetadata(
-          sourceDataUrl, // EPS data URL; edge function will treat as text-only
-          'eps',
+          sourceDataUrl,
+          photo.imageFormat, // 'eps' | 'svg'
           allKeys.openai.length > 0 ? allKeys.openai : undefined,
           metadataMode,
           (customPrompt ? customPrompt + '\n' : '') +
-            `The source asset is a vector EPS file named "${photo.file.name}". Infer the subject from the filename and produce vector-appropriate microstock metadata.`,
+            `The source asset is a vector ${vectorKind} file named "${photo.file.name}". Infer the subject from the filename and produce vector-appropriate microstock metadata.`,
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
           fpMode
         );
-        const finalEps = embedIptcXmpMetadata(
+        const finalAsset = embedIptcXmpMetadata(
           sourceDataUrl,
           metadata.title,
           metadata.description,
           metadata.keywords,
-          'eps'
+          photo.imageFormat
         );
         setPhotos(prev => prev.map(p =>
-          p.id === id ? { ...p, enhancedPreview: finalEps, metadata, status: 'ready' } : p
+          p.id === id ? { ...p, enhancedPreview: finalAsset, metadata, status: 'ready' } : p
         ));
         return true;
-      } catch (epsErr) {
-        const message = epsErr instanceof Error ? epsErr.message : 'EPS metadata generation failed';
-        console.error('EPS pipeline error:', epsErr);
+      } catch (vecErr) {
+        const message = vecErr instanceof Error ? vecErr.message : `${vectorKind} metadata generation failed`;
+        console.error(`${vectorKind} pipeline error:`, vecErr);
         toast.error(message);
         setPhotos(prev => prev.map(p =>
           p.id === id ? { ...p, status: 'error', error: message } : p
