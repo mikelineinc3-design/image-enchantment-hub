@@ -5,6 +5,7 @@ import { generateRawExif } from './exif';
 import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from './iptcXmpWriter';
 import { embedMetadataIntoPng } from './pngMetadataWriter';
 import { embedMetadataIntoEpsDataUrl } from './epsMetadataWriter';
+import { embedMetadataIntoSvgDataUrl } from './svgMetadataWriter';
 
 // Maximum dimensions to prevent memory issues
 const MAX_DIMENSION = 4000;
@@ -277,6 +278,9 @@ export function embedIptcXmpMetadata(
   if (format === 'eps') {
     return embedMetadataIntoEpsDataUrl(dataUrl, xmpData);
   }
+  if (format === 'svg') {
+    return embedMetadataIntoSvgDataUrl(dataUrl, xmpData);
+  }
   return embedXmpIntoJpeg(dataUrl, xmpData);
 }
 
@@ -491,12 +495,14 @@ function getCombinedFilterSettings(filters: FilterType[]) {
 export function detectImageFormat(file: File): ImageFormat {
   const name = file.name.toLowerCase();
   if (file.type === 'application/postscript' || name.endsWith('.eps')) return 'eps';
+  if (file.type === 'image/svg+xml' || name.endsWith('.svg')) return 'svg';
   if (file.type === 'image/png') return 'png';
   return 'jpeg';
 }
 
 export function detectFormatFromDataUrl(dataUrl: string): ImageFormat {
   if (dataUrl.startsWith('data:application/postscript')) return 'eps';
+  if (dataUrl.startsWith('data:image/svg+xml')) return 'svg';
   if (dataUrl.startsWith('data:image/png')) return 'png';
   return 'jpeg';
 }

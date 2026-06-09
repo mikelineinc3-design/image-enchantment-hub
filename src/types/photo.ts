@@ -1,6 +1,6 @@
 export type FilterType = 'default' | 'vibrant' | 'cinematic' | 'natural' | 'product' | 'sharpener' | 'hdr';
 export type FileType = 'jpg' | 'png' | 'eps' | 'svg';
-export type ImageFormat = 'jpeg' | 'png' | 'eps';
+export type ImageFormat = 'jpeg' | 'png' | 'eps' | 'svg';
 export type MetadataMode = 'default' | 'data';
 export type UpscaleTarget = 'none' | '4mp' | '5mp' | '6mp';
 
