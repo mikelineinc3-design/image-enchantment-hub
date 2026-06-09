@@ -28,7 +28,10 @@ export async function downloadAllAsZip(photos: PhotoFile[]): Promise<void> {
     if (!photo.enhancedPreview) continue;
 
     // Use correct extension based on image format
-    const ext = photo.imageFormat === 'png' ? 'png' : photo.imageFormat === 'eps' ? 'eps' : 'jpg';
+    const ext =
+      photo.imageFormat === 'png' ? 'png' :
+      photo.imageFormat === 'eps' ? 'eps' :
+      photo.imageFormat === 'svg' ? 'svg' : 'jpg';
     const baseName = photo.metadata?.filename.replace(/\.[^/.]+$/, '') ||
       photo.file.name.replace(/\.[^/.]+$/, '') + '_enhanced';
     const filename = `${baseName}.${ext}`;

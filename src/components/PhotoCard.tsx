@@ -42,7 +42,10 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTy
     link.href = URL.createObjectURL(blob);
     
     // Use correct extension based on image format
-    const ext = photo.imageFormat === 'png' ? 'png' : photo.imageFormat === 'eps' ? 'eps' : 'jpg';
+    const ext =
+      photo.imageFormat === 'png' ? 'png' :
+      photo.imageFormat === 'eps' ? 'eps' :
+      photo.imageFormat === 'svg' ? 'svg' : 'jpg';
     const baseName = photo.metadata?.filename?.replace(/\.[^/.]+$/, '') ||
       photo.file.name.replace(/\.[^/.]+$/, '') + '_enhanced';
     const filename = `${baseName}.${ext}`;
@@ -56,6 +59,7 @@ export function PhotoCard({ photo, onEnhance, onRemove, onFilterChange, onFileTy
     const metadataNote =
       photo.imageFormat === 'png' ? '' :
       photo.imageFormat === 'eps' ? ' with embedded XMP/PostScript metadata' :
+      photo.imageFormat === 'svg' ? ' with embedded XMP/SVG metadata' :
       ' with embedded EXIF data';
     toast.success(`File downloaded${metadataNote}!`);
   };
