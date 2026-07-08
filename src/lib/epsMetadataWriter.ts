@@ -65,9 +65,32 @@ function base64ToBytes(base64: string): Uint8Array {
   return out;
 }
 
-// Accepts the raw EPS file contents as a string and returns updated EPS string.
+// Escape a PostScript literal string for `(...)` syntax.
+function escapePsString(str: string): string {
+  return escapePsComment(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+// Accepts the raw EPS file contents as a string and returns EPS-10 compliant
+// output with embedded DSC comments, a pdfmark DOCINFO block, and an XMP
+// packet — without duplicating existing comments or disturbing binary data
+// past %%EndComments / preview segments.
 export function embedMetadataIntoEpsText(epsText: string, data: IptcXmpData): string {
-  const dscBlock = [
+  // 1) Guarantee an EPS-10 magic header (Adobe-3.0 EPSF-3.0 is the current EPS 10 baseline).
+  const hasHeader = /^%!PS-Adobe-[0-9.]+\s+EPSF-[0-9.]+/i.test(epsText);
+  if (!hasHeader) {
+    epsText = '%!PS-Adobe-3.0 EPSF-3.0\n' + epsText;
+  }
+
+  // 2) Remove any existing DSC lines we are about to rewrite so we don't emit duplicates.
+  const managedKeys = ['Title', 'Creator', 'CreationDate', 'Copyright', 'For', 'Keywords', 'Subject', 'LanguageLevel', 'Pages'];
+  const managedRe = new RegExp(`^%%(?:${managedKeys.join('|')}):[^\\n]*\\n`, 'gm');
+  let out = epsText.replace(managedRe, '');
+
+  // 3) Build fresh DSC lines (EPS 10 requires LanguageLevel + Pages).
+  const dscLines = [
     `%%Title: ${escapePsComment(data.title)}`,
     `%%Creator: ${escapePsComment(data.author)}`,
     `%%CreationDate: ${new Date().toUTCString()}`,
@@ -75,23 +98,36 @@ export function embedMetadataIntoEpsText(epsText: string, data: IptcXmpData): st
     `%%For: ${escapePsComment(data.author)}`,
     `%%Keywords: ${escapePsComment(data.keywords.join(', '))}`,
     `%%Subject: ${escapePsComment(data.description)}`,
-  ].join('\n');
+    `%%LanguageLevel: 2`,
+    `%%Pages: 0`,
+  ].join('\n') + '\n';
 
+  // 4) Insert DSC block directly after the %!PS header line so parsers see them
+  //    as part of the header comments (before %%EndComments if present).
+  out = out.replace(/^(%!PS-Adobe-[^\n]*\n)/, `$1${dscLines}`);
+
+  // 5) Ensure a %%EndComments marker exists so the XMP block lands in the prolog,
+  //    not inside header comments (required by EPS 10 parsers like Vecteezy's).
+  if (!/^%%EndComments\s*$/m.test(out)) {
+    // Insert %%EndComments after the last header-line %% comment following the header.
+    out = out.replace(
+      /^(%!PS-Adobe-[^\n]*\n(?:%%[^\n]*\n)*)/,
+      `$1%%EndComments\n`
+    );
+  }
+
+  // 6) Build XMP + pdfmark block as a comment-wrapped island so it never
+  //    disturbs the vector operator stream that follows.
   const xmpPacket = buildXmpPacket(data);
-  // Wrap XMP packet in a PostScript comment block so EPS consumers (Illustrator,
-  // Photoshop, Adobe Stock indexer) can still parse it.
   const xmpEpsBlock =
-    '%begin_xml_code\n' +
-    '/currentdistillerparams where\n' +
-    '{pop currentdistillerparams /CoreDistVersion get 5000 lt} {true} ifelse\n' +
-    '{userdict /pdfmark /cleartomark load put}\n' +
-    '{userdict /pdfmark /cleartomark load put} ifelse\n' +
-    '[/Title (' + escapePsComment(data.title) + ')\n' +
-    ' /Author (' + escapePsComment(data.author) + ')\n' +
-    ' /Subject (' + escapePsComment(data.description) + ')\n' +
-    ' /Keywords (' + escapePsComment(data.keywords.join(', ')) + ')\n' +
-    ' /DOCINFO pdfmark\n' +
-    '%end_xml_code\n' +
+    '%%BeginProlog\n' +
+    '/pdfmark where {pop} {userdict /pdfmark /cleartomark load put} ifelse\n' +
+    '[ /Title (' + escapePsString(data.title) + ')\n' +
+    '  /Author (' + escapePsString(data.author) + ')\n' +
+    '  /Subject (' + escapePsString(data.description) + ')\n' +
+    '  /Keywords (' + escapePsString(data.keywords.join(', ')) + ')\n' +
+    '  /DOCINFO pdfmark\n' +
+    '%%EndProlog\n' +
     '%begin_xml_packet\n' +
     xmpPacket
       .split('\n')
@@ -99,23 +135,14 @@ export function embedMetadataIntoEpsText(epsText: string, data: IptcXmpData): st
       .join('\n') +
     '\n%end_xml_packet\n';
 
-  // Insert after the first %!PS line so DSC parsers still see the magic header.
-  const psHeaderMatch = epsText.match(/^%!PS[^\n]*\n/);
-  if (psHeaderMatch) {
-    const headerEnd = psHeaderMatch[0].length;
-    return (
-      epsText.slice(0, headerEnd) +
-      dscBlock +
-      '\n' +
-      xmpEpsBlock +
-      epsText.slice(headerEnd)
-    );
-  }
-  // No PS header — prepend a minimal one so the file still validates.
-  return (
-    '%!PS-Adobe-3.0 EPSF-3.0\n' +
-    dscBlock +
-    '\n' +
+  // 7) Strip any pre-existing prolog block we previously injected (idempotent re-runs).
+  out = out.replace(/%%BeginProlog[\s\S]*?%end_xml_packet\s*\n/, '');
+
+  // 8) Insert the XMP/prolog block immediately after %%EndComments.
+  out = out.replace(/(^%%EndComments\s*\n)/m, `$1${xmpEpsBlock}`);
+
+  return out;
+}
     xmpEpsBlock +
     epsText
   );
