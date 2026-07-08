@@ -268,7 +268,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
                   : {
                       role: "user",
                       content: [
-                        { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
+                        { type: "text", text: rasterUserTextLovable },
                         { type: "image_url", image_url: { url: imageBase64 } }
                       ]
                     }
