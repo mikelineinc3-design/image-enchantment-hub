@@ -45,13 +45,16 @@ serve(async (req) => {
     }
     
     // Validate base64 format - must be a valid data URL.
-    // Vector assets (EPS) arrive as application/postscript and are handled text-only below.
+    // Vector assets (EPS/SVG) may arrive as their native MIME (text-only path)
+    // OR as a rasterized PNG preview (vision path — describes the actual artwork).
+    const rasterDataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
     const isVectorPayload =
-      imageBase64.startsWith('data:application/postscript') ||
-      fileType === 'eps' || fileType === 'svg';
+      !rasterDataUrlMatch &&
+      (imageBase64.startsWith('data:application/postscript') ||
+        imageBase64.startsWith('data:image/svg+xml') ||
+        fileType === 'eps' || fileType === 'svg');
 
-    const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
-    if (!dataUrlMatch && !isVectorPayload) {
+    if (!rasterDataUrlMatch && !isVectorPayload) {
       const hasBase64Content = imageBase64.length > 100 && imageBase64.includes(',');
       if (!hasBase64Content) {
         console.error('Invalid image data URL format:', imageBase64.substring(0, 100));
@@ -182,8 +185,11 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
         // For vector assets (EPS/SVG), the model cannot see pixels. Build a
         // text-only user message so providers don't reject the image_url payload.
         const vectorUserText = `Generate microstock metadata for a VECTOR ${safeFileType.toUpperCase()} asset. ${customPrompt ? customPrompt + ' ' : ''}Respond with the required JSON only.`;
-        const rasterUserTextOpenAI = "Analyze this image and generate optimized metadata for microstock submission.";
-        const rasterUserTextGroq = "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only.";
+        const vectorRasterUserText = `The attached image is a rasterized PNG preview of a VECTOR ${safeFileType.toUpperCase()} artwork. Analyze what is VISUALLY drawn (characters, subjects, scene, style, colors, composition) and generate microstock metadata describing the actual artwork — DO NOT guess from the filename. Include vector-appropriate keywords where they genuinely fit. ${customPrompt ? customPrompt + ' ' : ''}Respond with the required JSON only.`;
+        const rasterUserTextOpenAI = isVector ? vectorRasterUserText : "Analyze this image and generate optimized metadata for microstock submission.";
+        const rasterUserTextGroq = isVector ? vectorRasterUserText : "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only.";
+        const rasterUserTextGemini = isVector ? vectorRasterUserText : 'Analyze the attached image and respond with the required JSON only.';
+        const rasterUserTextLovable = isVector ? vectorRasterUserText : "Analyze this image and generate optimized metadata for microstock submission.";
 
         if (keyType === 'openai') {
           response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -235,7 +241,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           const mimeType = base64Match?.[1] || 'image/jpeg';
           const rawBase64 = base64Match?.[2] || imageBase64.split(',').pop() || '';
           const parts: Array<Record<string, unknown>> = [
-            { text: `${systemPrompt}\n\n${isVectorPayload ? vectorUserText : 'Analyze the attached image and respond with the required JSON only.'}` }
+            { text: `${systemPrompt}\n\n${isVectorPayload ? vectorUserText : rasterUserTextGemini}` }
           ];
           if (!isVectorPayload) {
             parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
@@ -262,7 +268,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
                   : {
                       role: "user",
                       content: [
-                        { type: "text", text: "Analyze this image and generate optimized metadata for microstock submission." },
+                        { type: "text", text: rasterUserTextLovable },
                         { type: "image_url", image_url: { url: imageBase64 } }
                       ]
                     }
