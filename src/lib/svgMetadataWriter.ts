@@ -81,7 +81,7 @@ export function embedMetadataIntoSvgText(svgText: string, data: IptcXmpData): st
     const tag = svgOpenMatch[0];
     const insertAt = svgOpenMatch.index + tag.length;
     const before = svgText.slice(0, insertAt);
-    const after = stripExistingMetadata(svgText.slice(insertAt));
+    const after = stripLeadingMetadata(svgText.slice(insertAt));
     return before + '\n' + metadataBlock + after;
   }
 
