@@ -179,13 +179,28 @@ const Index = () => {
         console.log(`[${vectorKind}] keys available`, {
           gemini: allKeys.gemini.length, openai: allKeys.openai.length, groq: allKeys.groq.length,
         });
+        // For SVG, rasterize the artwork to a PNG preview so the AI can see
+        // what's drawn (not guess from the filename). EPS can't be rendered in
+        // the browser — fall back to text-only description.
+        let visualPayload = sourceDataUrl;
+        if (photo.imageFormat === 'svg') {
+          try {
+            visualPayload = await rasterizeSvgDataUrlToPng(sourceDataUrl, 1024);
+            console.log(`[SVG] rasterized preview length=${visualPayload.length}`);
+          } catch (rasterErr) {
+            console.warn('[SVG] rasterization failed, falling back to text-only', rasterErr);
+            visualPayload = sourceDataUrl;
+          }
+        }
         const metadata = await generateMicrostockMetadata(
-          sourceDataUrl,
-          photo.imageFormat, // 'eps' | 'svg'
+          visualPayload,
+          photo.imageFormat, // 'eps' | 'svg' — keeps vector prompt rules
           allKeys.openai.length > 0 ? allKeys.openai : undefined,
           metadataMode,
           (customPrompt ? customPrompt + '\n' : '') +
-            `The source asset is a vector ${vectorKind} file named "${photo.file.name}". Infer the subject from the filename and produce vector-appropriate microstock metadata.`,
+            (photo.imageFormat === 'svg'
+              ? `Describe the ACTUAL artwork shown in the rasterized preview (subjects, characters, scene, style). Ignore the filename "${photo.file.name}".`
+              : `The source asset is a vector EPS file named "${photo.file.name}". No visual preview is available — produce generic-safe vector metadata.`),
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
           fpMode
