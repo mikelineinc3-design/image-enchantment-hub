@@ -45,13 +45,16 @@ serve(async (req) => {
     }
     
     // Validate base64 format - must be a valid data URL.
-    // Vector assets (EPS) arrive as application/postscript and are handled text-only below.
+    // Vector assets (EPS/SVG) may arrive as their native MIME (text-only path)
+    // OR as a rasterized PNG preview (vision path — describes the actual artwork).
+    const rasterDataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
     const isVectorPayload =
-      imageBase64.startsWith('data:application/postscript') ||
-      fileType === 'eps' || fileType === 'svg';
+      !rasterDataUrlMatch &&
+      (imageBase64.startsWith('data:application/postscript') ||
+        imageBase64.startsWith('data:image/svg+xml') ||
+        fileType === 'eps' || fileType === 'svg');
 
-    const dataUrlMatch = imageBase64.match(/^data:image\/(jpeg|jpg|png|gif|webp|x-png);base64,/i);
-    if (!dataUrlMatch && !isVectorPayload) {
+    if (!rasterDataUrlMatch && !isVectorPayload) {
       const hasBase64Content = imageBase64.length > 100 && imageBase64.includes(',');
       if (!hasBase64Content) {
         console.error('Invalid image data URL format:', imageBase64.substring(0, 100));
