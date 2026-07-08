@@ -185,8 +185,11 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
         // For vector assets (EPS/SVG), the model cannot see pixels. Build a
         // text-only user message so providers don't reject the image_url payload.
         const vectorUserText = `Generate microstock metadata for a VECTOR ${safeFileType.toUpperCase()} asset. ${customPrompt ? customPrompt + ' ' : ''}Respond with the required JSON only.`;
-        const rasterUserTextOpenAI = "Analyze this image and generate optimized metadata for microstock submission.";
-        const rasterUserTextGroq = "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only.";
+        const vectorRasterUserText = `The attached image is a rasterized PNG preview of a VECTOR ${safeFileType.toUpperCase()} artwork. Analyze what is VISUALLY drawn (characters, subjects, scene, style, colors, composition) and generate microstock metadata describing the actual artwork — DO NOT guess from the filename. Include vector-appropriate keywords where they genuinely fit. ${customPrompt ? customPrompt + ' ' : ''}Respond with the required JSON only.`;
+        const rasterUserTextOpenAI = isVector ? vectorRasterUserText : "Analyze this image and generate optimized metadata for microstock submission.";
+        const rasterUserTextGroq = isVector ? vectorRasterUserText : "Analyze this image and generate optimized metadata for microstock submission. Respond with the required JSON only.";
+        const rasterUserTextGemini = isVector ? vectorRasterUserText : 'Analyze the attached image and respond with the required JSON only.';
+        const rasterUserTextLovable = isVector ? vectorRasterUserText : "Analyze this image and generate optimized metadata for microstock submission.";
 
         if (keyType === 'openai') {
           response = await fetch("https://api.openai.com/v1/chat/completions", {
