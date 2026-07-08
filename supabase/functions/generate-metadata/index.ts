@@ -241,7 +241,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           const mimeType = base64Match?.[1] || 'image/jpeg';
           const rawBase64 = base64Match?.[2] || imageBase64.split(',').pop() || '';
           const parts: Array<Record<string, unknown>> = [
-            { text: `${systemPrompt}\n\n${isVectorPayload ? vectorUserText : 'Analyze the attached image and respond with the required JSON only.'}` }
+            { text: `${systemPrompt}\n\n${isVectorPayload ? vectorUserText : rasterUserTextGemini}` }
           ];
           if (!isVectorPayload) {
             parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
