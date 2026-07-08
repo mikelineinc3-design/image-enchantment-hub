@@ -63,13 +63,13 @@ ${keywordTags}
 `;
 }
 
-// Strip any existing top-level <title>, <desc>, or <metadata> children so we
-// don't double up after re-runs.
-function stripExistingMetadata(svgInner: string): string {
-  return svgInner
-    .replace(/<title\b[\s\S]*?<\/title>\s*/gi, '')
-    .replace(/<desc\b[\s\S]*?<\/desc>\s*/gi, '')
-    .replace(/<metadata\b[\s\S]*?<\/metadata>\s*/gi, '');
+// Strip ONLY the contiguous run of <title>/<desc>/<metadata> elements that
+// appear immediately after the opening <svg> tag. Anything nested inside the
+// artwork (e.g. accessibility <title> on shapes) is left untouched so the
+// vector structure and UTF-8 content stay byte-intact.
+function stripLeadingMetadata(svgInner: string): string {
+  const leadingRe = /^(\s*<(?:title|desc|metadata)\b[\s\S]*?<\/(?:title|desc|metadata)>\s*)+/i;
+  return svgInner.replace(leadingRe, '');
 }
 
 export function embedMetadataIntoSvgText(svgText: string, data: IptcXmpData): string {
