@@ -143,10 +143,6 @@ export function embedMetadataIntoEpsText(epsText: string, data: IptcXmpData): st
 
   return out;
 }
-    xmpEpsBlock +
-    epsText
-  );
-}
 
 // Public entry point: takes the EPS data URL (any common variant) and returns
 // a new data URL of MIME application/postscript with metadata embedded.
