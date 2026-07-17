@@ -60,6 +60,8 @@ export interface PhotoFile {
   rawExif: RawExifData;
   enhancedExif: ExifData;
   enhancedPreview?: string;
+  /** Optional PNG data URL extracted from an EPS binary preview, used only for AI vision + thumbnail. */
+  visualPreviewDataUrl?: string;
   status: 'uploaded' | 'extracting' | 'enhancing' | 'generating-metadata' | 'ready' | 'error';
   error?: string;
   selectedFilters: FilterType[];
