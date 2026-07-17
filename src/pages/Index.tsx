@@ -11,6 +11,7 @@ import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectIm
 import { ensureJpegMinSize } from '@/lib/fpInflater';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { rasterizeSvgDataUrlToPng } from '@/lib/vectorRasterizer';
+import { extractEpsPreview } from '@/lib/epsPreviewExtractor';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { downloadCSV } from '@/lib/csvExporter';
 import { useApiKeys } from '@/hooks/useApiKeys';
