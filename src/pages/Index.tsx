@@ -207,9 +207,10 @@ const Index = () => {
           gemini: allKeys.gemini.length, openai: allKeys.openai.length, groq: allKeys.groq.length,
         });
         // For SVG, rasterize the artwork to a PNG preview so the AI can see
-        // what's drawn (not guess from the filename). EPS can't be rendered in
-        // the browser — fall back to text-only description.
+        // what's drawn (not guess from the filename). For EPS, use the
+        // embedded raster preview we extracted at upload time (if any).
         let visualPayload = sourceDataUrl;
+        let epsHasVisual = false;
         if (photo.imageFormat === 'svg') {
           try {
             visualPayload = await rasterizeSvgDataUrlToPng(sourceDataUrl, 1024);
@@ -218,6 +219,10 @@ const Index = () => {
             console.warn('[SVG] rasterization failed, falling back to text-only', rasterErr);
             visualPayload = sourceDataUrl;
           }
+        } else if (photo.imageFormat === 'eps' && photo.visualPreviewDataUrl) {
+          visualPayload = photo.visualPreviewDataUrl;
+          epsHasVisual = true;
+          console.log(`[EPS] using embedded preview, length=${visualPayload.length}`);
         }
         const metadata = await generateMicrostockMetadata(
           visualPayload,
@@ -227,7 +232,9 @@ const Index = () => {
           (customPrompt ? customPrompt + '\n' : '') +
             (photo.imageFormat === 'svg'
               ? `Describe the ACTUAL artwork shown in the rasterized preview (subjects, characters, scene, style). Ignore the filename "${photo.file.name}".`
-              : `The source asset is a vector EPS file named "${photo.file.name}". No visual preview is available — produce generic-safe vector metadata.`),
+              : epsHasVisual
+                ? `Describe the ACTUAL artwork shown in the embedded EPS preview (subjects, style, colors). Ignore the filename "${photo.file.name}".`
+                : `The source asset is a vector EPS file named "${photo.file.name}". No visual preview is available — produce generic-safe vector metadata.`),
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
           fpMode
