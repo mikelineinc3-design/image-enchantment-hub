@@ -11,6 +11,7 @@ import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectIm
 import { ensureJpegMinSize } from '@/lib/fpInflater';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { rasterizeSvgDataUrlToPng } from '@/lib/vectorRasterizer';
+import { extractEpsPreview } from '@/lib/epsPreviewExtractor';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { downloadCSV } from '@/lib/csvExporter';
 import { useApiKeys } from '@/hooks/useApiKeys';
@@ -96,9 +97,35 @@ const Index = () => {
           if (isVector) {
             // EPS/SVG have no EXIF — just read the file as a data URL for later embedding.
             const dataUrl = await fileToDataUrl(file);
+
+            // For EPS: try to extract the embedded raster preview so the AI
+            // vision pipeline (and thumbnail) can actually see the artwork.
+            // Original EPS bytes stay in `originalDataUrl` for metadata
+            // embedding and download — unchanged.
+            let visualPreviewDataUrl: string | undefined;
+            let previewThumb = preview;
+            if (imageFormat === 'eps') {
+              try {
+                const extracted = await extractEpsPreview(file);
+                if (extracted) {
+                  visualPreviewDataUrl = extracted;
+                  previewThumb = extracted;
+                } else {
+                  toast.warning(
+                    `"${file.name}" has no embedded preview — re-export from Illustrator with "Include Document Thumbnails" or a TIFF preview enabled for best results.`
+                  );
+                }
+              } catch (epsErr) {
+                console.warn('[EPS] preview extraction failed', epsErr);
+                toast.warning(
+                  `Couldn't extract a preview from "${file.name}" — continuing without a visual preview.`
+                );
+              }
+            }
+
             setPhotos(prev => prev.map(p =>
               p.id === id
-                ? { ...p, originalDataUrl: dataUrl, status: 'uploaded' }
+                ? { ...p, originalDataUrl: dataUrl, preview: previewThumb, visualPreviewDataUrl, status: 'uploaded' }
                 : p
             ));
             return;
@@ -180,9 +207,10 @@ const Index = () => {
           gemini: allKeys.gemini.length, openai: allKeys.openai.length, groq: allKeys.groq.length,
         });
         // For SVG, rasterize the artwork to a PNG preview so the AI can see
-        // what's drawn (not guess from the filename). EPS can't be rendered in
-        // the browser — fall back to text-only description.
+        // what's drawn (not guess from the filename). For EPS, use the
+        // embedded raster preview we extracted at upload time (if any).
         let visualPayload = sourceDataUrl;
+        let epsHasVisual = false;
         if (photo.imageFormat === 'svg') {
           try {
             visualPayload = await rasterizeSvgDataUrlToPng(sourceDataUrl, 1024);
@@ -191,6 +219,10 @@ const Index = () => {
             console.warn('[SVG] rasterization failed, falling back to text-only', rasterErr);
             visualPayload = sourceDataUrl;
           }
+        } else if (photo.imageFormat === 'eps' && photo.visualPreviewDataUrl) {
+          visualPayload = photo.visualPreviewDataUrl;
+          epsHasVisual = true;
+          console.log(`[EPS] using embedded preview, length=${visualPayload.length}`);
         }
         const metadata = await generateMicrostockMetadata(
           visualPayload,
@@ -200,7 +232,9 @@ const Index = () => {
           (customPrompt ? customPrompt + '\n' : '') +
             (photo.imageFormat === 'svg'
               ? `Describe the ACTUAL artwork shown in the rasterized preview (subjects, characters, scene, style). Ignore the filename "${photo.file.name}".`
-              : `The source asset is a vector EPS file named "${photo.file.name}". No visual preview is available — produce generic-safe vector metadata.`),
+              : epsHasVisual
+                ? `Describe the ACTUAL artwork shown in the embedded EPS preview (subjects, style, colors). Ignore the filename "${photo.file.name}".`
+                : `The source asset is a vector EPS file named "${photo.file.name}". No visual preview is available — produce generic-safe vector metadata.`),
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
           fpMode
