@@ -97,9 +97,35 @@ const Index = () => {
           if (isVector) {
             // EPS/SVG have no EXIF — just read the file as a data URL for later embedding.
             const dataUrl = await fileToDataUrl(file);
+
+            // For EPS: try to extract the embedded raster preview so the AI
+            // vision pipeline (and thumbnail) can actually see the artwork.
+            // Original EPS bytes stay in `originalDataUrl` for metadata
+            // embedding and download — unchanged.
+            let visualPreviewDataUrl: string | undefined;
+            let previewThumb = preview;
+            if (imageFormat === 'eps') {
+              try {
+                const extracted = await extractEpsPreview(file);
+                if (extracted) {
+                  visualPreviewDataUrl = extracted;
+                  previewThumb = extracted;
+                } else {
+                  toast.warning(
+                    `"${file.name}" has no embedded preview — re-export from Illustrator with "Include Document Thumbnails" or a TIFF preview enabled for best results.`
+                  );
+                }
+              } catch (epsErr) {
+                console.warn('[EPS] preview extraction failed', epsErr);
+                toast.warning(
+                  `Couldn't extract a preview from "${file.name}" — continuing without a visual preview.`
+                );
+              }
+            }
+
             setPhotos(prev => prev.map(p =>
               p.id === id
-                ? { ...p, originalDataUrl: dataUrl, status: 'uploaded' }
+                ? { ...p, originalDataUrl: dataUrl, preview: previewThumb, visualPreviewDataUrl, status: 'uploaded' }
                 : p
             ));
             return;
