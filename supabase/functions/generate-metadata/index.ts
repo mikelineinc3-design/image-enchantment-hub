@@ -246,7 +246,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           if (!isVectorPayload) {
             parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
           }
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
