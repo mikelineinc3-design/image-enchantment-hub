@@ -219,7 +219,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             body: JSON.stringify({
               model: isVectorPayload
                 ? "llama-3.3-70b-versatile"
-                : "meta-llama/llama-4-scout-17b-16e-instruct",
+                : "meta-llama/llama-4-maverick-17b-128e-instruct",
               messages: [
                 { role: "system", content: systemPrompt },
                 isVectorPayload
@@ -246,7 +246,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           if (!isVectorPayload) {
             parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
           }
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
