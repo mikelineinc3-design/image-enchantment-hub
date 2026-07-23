@@ -12,6 +12,7 @@ import { ensureJpegMinSize } from '@/lib/fpInflater';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { rasterizeSvgDataUrlToPng } from '@/lib/vectorRasterizer';
 import { extractEpsPreview } from '@/lib/epsPreviewExtractor';
+import { convertEpsToPngViaCloudConvert } from '@/lib/cloudConvertPreview';
 import { downloadAllAsZip } from '@/lib/zipDownloader';
 import { downloadCSV } from '@/lib/csvExporter';
 import { useApiKeys } from '@/hooks/useApiKeys';
@@ -111,9 +112,24 @@ const Index = () => {
                   visualPreviewDataUrl = extracted;
                   previewThumb = extracted;
                 } else {
-                  toast.warning(
-                    `"${file.name}" has no embedded preview — re-export from Illustrator with "Include Document Thumbnails" or a TIFF preview enabled for best results.`
-                  );
+                  // No embedded preview — try CloudConvert fallback if keys are configured.
+                  const ccKeys = getAllKeys().cloudconvert;
+                  if (ccKeys.length > 0) {
+                    toast.info(`Converting "${file.name}" preview via CloudConvert...`);
+                    const converted = await convertEpsToPngViaCloudConvert(file, ccKeys);
+                    if (converted) {
+                      visualPreviewDataUrl = converted;
+                      previewThumb = converted;
+                    } else {
+                      toast.warning(
+                        `CloudConvert failed for "${file.name}" — metadata will be generic (no visual preview).`
+                      );
+                    }
+                  } else {
+                    toast.warning(
+                      `"${file.name}" has no embedded preview. Add a CloudConvert API key in AI API Keys to auto-rasterize, or re-export from Illustrator with "Include Document Thumbnails" enabled.`
+                    );
+                  }
                 }
               } catch (epsErr) {
                 console.warn('[EPS] preview extraction failed', epsErr);
@@ -161,7 +177,7 @@ const Index = () => {
     }
 
     toast.success(`${imageFiles.length} files uploaded`);
-  }, [batchFilters, batchFileType]);
+  }, [batchFilters, batchFileType, getAllKeys]);
 
   const handleEnhance = useCallback(async (id: string): Promise<boolean> => {
     const photo = photos.find(p => p.id === id);
@@ -546,6 +562,7 @@ const Index = () => {
             geminiKeys={getKeys('gemini')}
             openaiKeys={getKeys('openai')}
             groqKeys={getKeys('groq')}
+            cloudconvertKeys={getKeys('cloudconvert')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />

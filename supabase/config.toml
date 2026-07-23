@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.generate-metadata]
 verify_jwt = false
+
+[functions.convert-eps-preview]
+verify_jwt = false
