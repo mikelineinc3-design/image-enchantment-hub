@@ -28,7 +28,6 @@ async function tryKey(apiKey: string, epsBytes: Uint8Array): Promise<string | nu
           input: 'import-eps',
           input_format: 'eps',
           output_format: 'png',
-          engine: 'ghostscript',
           pixel_density: 150,
           alpha: false,
         },
