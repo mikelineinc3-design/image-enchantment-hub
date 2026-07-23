@@ -20,20 +20,26 @@ async function tryKey(apiKey: string, epsBytes: Uint8Array): Promise<string | nu
   const jobRes = await fetch('https://api.cloudconvert.com/v2/jobs', {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tasks: {
-        'import-eps': { operation: 'import/upload' },
-        'convert-eps': {
-          operation: 'convert',
-          input: 'import-eps',
-          input_format: 'eps',
-          output_format: 'png',
-          pixel_density: 150,
-          alpha: false,
+      body: JSON.stringify({
+        tasks: {
+          'import-eps': { operation: 'import/upload' },
+          'convert-to-pdf': {
+            operation: 'convert',
+            input: 'import-eps',
+            input_format: 'eps',
+            output_format: 'pdf',
+          },
+          'convert-to-png': {
+            operation: 'convert',
+            input: 'convert-to-pdf',
+            input_format: 'pdf',
+            output_format: 'png',
+            pixel_density: 150,
+            alpha: false,
+          },
+          'export-png': { operation: 'export/url', input: 'convert-to-png' },
         },
-        'export-png': { operation: 'export/url', input: 'convert-eps' },
-      },
-    }),
+      }),
   });
 
   if (!jobRes.ok) {
