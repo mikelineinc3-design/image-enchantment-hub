@@ -562,6 +562,7 @@ const Index = () => {
             geminiKeys={getKeys('gemini')}
             openaiKeys={getKeys('openai')}
             groqKeys={getKeys('groq')}
+            cloudconvertKeys={getKeys('cloudconvert')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />
