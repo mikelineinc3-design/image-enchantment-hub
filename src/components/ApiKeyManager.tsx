@@ -9,6 +9,7 @@ interface ApiKeyManagerProps {
   geminiKeys: string[];
   openaiKeys: string[];
   groqKeys: string[];
+  cloudconvertKeys: string[];
   onAddKey: (provider: ApiProvider, key: string) => boolean;
   onRemoveKey: (provider: ApiProvider, index: number) => void;
 }
@@ -17,6 +18,7 @@ const PROVIDER_META: Record<ApiProvider, { label: string; limit: number; color: 
   gemini: { label: 'Gemini', limit: 5, color: 'text-primary', help: { href: 'https://aistudio.google.com/app/apikey', label: 'Google AI Studio' } },
   openai: { label: 'OpenAI', limit: 3, color: 'text-green-500', help: { href: 'https://platform.openai.com/api-keys', label: 'OpenAI Platform' } },
   groq: { label: 'Groq', limit: 3, color: 'text-orange-500', help: { href: 'https://console.groq.com/keys', label: 'Groq Console' } },
+  cloudconvert: { label: 'CloudConvert', limit: 10, color: 'text-blue-500', help: { href: 'https://cloudconvert.com/dashboard/api/v2/keys', label: 'CloudConvert Dashboard' } },
 };
 
 interface ProviderSectionProps {
@@ -91,13 +93,19 @@ function ProviderSection({ provider, keys, onAddKey, onRemoveKey }: ProviderSect
           {meta.help.label}
         </a>
       </p>
+      {provider === 'cloudconvert' && (
+        <p className="text-xs text-muted-foreground italic">
+          Used only as a fallback to rasterize EPS files with no embedded preview. Add multiple
+          keys/accounts to raise your daily conversion limit.
+        </p>
+      )}
     </div>
   );
 }
 
-export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, onAddKey, onRemoveKey }: ApiKeyManagerProps) {
+export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKeys, onAddKey, onRemoveKey }: ApiKeyManagerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const totalKeys = geminiKeys.length + openaiKeys.length + groqKeys.length;
+  const totalKeys = geminiKeys.length + openaiKeys.length + groqKeys.length + cloudconvertKeys.length;
 
   return (
     <div className="p-4 rounded-xl gradient-card border border-border">
@@ -114,10 +122,12 @@ export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, onAddKey, onRe
           <p className="text-xs text-muted-foreground">
             Add API keys from multiple providers. Keys rotate automatically to reduce rate limits.
             Gemini keys are used for image enhancement; OpenAI and Groq keys for metadata generation.
+            CloudConvert is used only to rasterize EPS files with no embedded preview.
           </p>
           <ProviderSection provider="gemini" keys={geminiKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
           <ProviderSection provider="openai" keys={openaiKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
           <ProviderSection provider="groq" keys={groqKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
+          <ProviderSection provider="cloudconvert" keys={cloudconvertKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
         </div>
       )}
     </div>
