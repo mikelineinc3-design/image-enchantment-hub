@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'ai_api_keys';
 
-export type ApiProvider = 'gemini' | 'openai' | 'groq';
+export type ApiProvider = 'gemini' | 'openai' | 'groq' | 'cloudconvert';
 
 export interface ApiKeyConfig {
   gemini: string[];
   openai: string[];
   groq: string[];
+  cloudconvert: string[];
   currentIndex: {
     gemini: number;
     openai: number;
     groq: number;
+    cloudconvert: number;
   };
 }
 
@@ -19,13 +21,15 @@ const PROVIDER_LIMITS: Record<ApiProvider, number> = {
   gemini: 5,
   openai: 3,
   groq: 3,
+  cloudconvert: 10,
 };
 
 const defaultConfig: ApiKeyConfig = {
   gemini: [],
   openai: [],
   groq: [],
-  currentIndex: { gemini: 0, openai: 0, groq: 0 }
+  cloudconvert: [],
+  currentIndex: { gemini: 0, openai: 0, groq: 0, cloudconvert: 0 }
 };
 
 export function useApiKeys() {
@@ -41,17 +45,20 @@ export function useApiKeys() {
             gemini: parsed.keys,
             openai: [],
             groq: [],
-            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0 }
+            cloudconvert: [],
+            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0, cloudconvert: 0 }
           });
         } else {
           setConfig({
             gemini: parsed.gemini || [],
             openai: parsed.openai || [],
             groq: parsed.groq || [],
+            cloudconvert: parsed.cloudconvert || [],
             currentIndex: {
               gemini: parsed.currentIndex?.gemini || 0,
               openai: parsed.currentIndex?.openai || 0,
               groq: parsed.currentIndex?.groq || 0,
+              cloudconvert: parsed.currentIndex?.cloudconvert || 0,
             }
           });
         }
@@ -91,9 +98,15 @@ export function useApiKeys() {
   };
 
   const getKeys = (provider: ApiProvider) => config[provider];
-  const getAllKeys = () => ({ gemini: config.gemini, openai: config.openai, groq: config.groq });
+  const getAllKeys = () => ({
+    gemini: config.gemini,
+    openai: config.openai,
+    groq: config.groq,
+    cloudconvert: config.cloudconvert,
+  });
   const getKeyCount = (provider: ApiProvider) => config[provider].length;
-  const getTotalKeyCount = () => config.gemini.length + config.openai.length + config.groq.length;
+  const getTotalKeyCount = () =>
+    config.gemini.length + config.openai.length + config.groq.length + config.cloudconvert.length;
   const getKeyLimit = (provider: ApiProvider) => PROVIDER_LIMITS[provider];
 
   return {
