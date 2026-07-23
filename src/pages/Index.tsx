@@ -177,7 +177,7 @@ const Index = () => {
     }
 
     toast.success(`${imageFiles.length} files uploaded`);
-  }, [batchFilters, batchFileType]);
+  }, [batchFilters, batchFileType, getAllKeys]);
 
   const handleEnhance = useCallback(async (id: string): Promise<boolean> => {
     const photo = photos.find(p => p.id === id);
