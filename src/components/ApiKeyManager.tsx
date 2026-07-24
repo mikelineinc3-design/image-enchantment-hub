@@ -105,9 +105,9 @@ function ProviderSection({ provider, keys, onAddKey, onRemoveKey }: ProviderSect
   );
 }
 
-export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKeys, onAddKey, onRemoveKey }: ApiKeyManagerProps) {
+export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKeys, openrouterKeys, onAddKey, onRemoveKey }: ApiKeyManagerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const totalKeys = geminiKeys.length + openaiKeys.length + groqKeys.length + cloudconvertKeys.length;
+  const totalKeys = geminiKeys.length + openaiKeys.length + groqKeys.length + cloudconvertKeys.length + openrouterKeys.length;
 
   return (
     <div className="p-4 rounded-xl gradient-card border border-border">
