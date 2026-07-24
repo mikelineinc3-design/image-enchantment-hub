@@ -89,6 +89,10 @@ serve(async (req) => {
     if (groqApiKeys && Array.isArray(groqApiKeys)) {
       for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
     }
+    // OpenRouter keys — OpenAI-compatible, vision-capable fallback
+    if (openrouterApiKeys && Array.isArray(openrouterApiKeys)) {
+      for (const k of openrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openrouter' });
+    }
 
     // Lovable AI Gateway as final fallback
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
