@@ -253,7 +253,8 @@ const Index = () => {
                 : `The source asset is a vector EPS file named "${photo.file.name}". No visual preview is available — produce generic-safe vector metadata.`),
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
-          fpMode
+          fpMode,
+          allKeys.openrouter.length > 0 ? allKeys.openrouter : undefined
         );
         const finalAsset = embedIptcXmpMetadata(
           sourceDataUrl,
@@ -384,7 +385,8 @@ const Index = () => {
           customPrompt,
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
-          fpMode
+          fpMode,
+          allKeys.openrouter.length > 0 ? allKeys.openrouter : undefined
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
@@ -563,6 +565,7 @@ const Index = () => {
             openaiKeys={getKeys('openai')}
             groqKeys={getKeys('groq')}
             cloudconvertKeys={getKeys('cloudconvert')}
+            openrouterKeys={getKeys('openrouter')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />

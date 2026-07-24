@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai' | 'groq' | 'gemini';
+  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'openrouter';
 }
 
 interface ProviderFailure {
@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false } = await req.json();
+    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, openrouterApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -88,6 +88,10 @@ serve(async (req) => {
     // Groq keys — vision-capable model used below
     if (groqApiKeys && Array.isArray(groqApiKeys)) {
       for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
+    }
+    // OpenRouter keys — OpenAI-compatible, vision-capable fallback
+    if (openrouterApiKeys && Array.isArray(openrouterApiKeys)) {
+      for (const k of openrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openrouter' });
     }
 
     // Lovable AI Gateway as final fallback
@@ -252,6 +256,27 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             body: JSON.stringify({
               contents: [{ role: "user", parts }],
               generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
+            }),
+          });
+        } else if (keyType === 'openrouter') {
+          response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemma-4-31b-it:free",
+              messages: [
+                { role: "system", content: systemPrompt },
+                isVectorPayload
+                  ? { role: "user", content: vectorUserText }
+                  : {
+                      role: "user",
+                      content: [
+                        { type: "text", text: rasterUserTextOpenAI },
+                        { type: "image_url", image_url: { url: imageBase64 } }
+                      ]
+                    }
+              ],
+              max_tokens: 1000
             }),
           });
         } else {
