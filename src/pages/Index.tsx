@@ -563,6 +563,7 @@ const Index = () => {
             openaiKeys={getKeys('openai')}
             groqKeys={getKeys('groq')}
             cloudconvertKeys={getKeys('cloudconvert')}
+            openrouterKeys={getKeys('openrouter')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />
