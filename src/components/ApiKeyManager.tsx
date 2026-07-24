@@ -130,6 +130,7 @@ export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKe
           <ProviderSection provider="openai" keys={openaiKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
           <ProviderSection provider="groq" keys={groqKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
           <ProviderSection provider="cloudconvert" keys={cloudconvertKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
+          <ProviderSection provider="openrouter" keys={openrouterKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
         </div>
       )}
     </div>
