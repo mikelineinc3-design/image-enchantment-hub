@@ -110,10 +110,11 @@ export function useApiKeys() {
     openai: config.openai,
     groq: config.groq,
     cloudconvert: config.cloudconvert,
+    openrouter: config.openrouter,
   });
   const getKeyCount = (provider: ApiProvider) => config[provider].length;
   const getTotalKeyCount = () =>
-    config.gemini.length + config.openai.length + config.groq.length + config.cloudconvert.length;
+    config.gemini.length + config.openai.length + config.groq.length + config.cloudconvert.length + config.openrouter.length;
   const getKeyLimit = (provider: ApiProvider) => PROVIDER_LIMITS[provider];
 
   return {
