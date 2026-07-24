@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai' | 'groq' | 'gemini';
+  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'openrouter';
 }
 
 interface ProviderFailure {
