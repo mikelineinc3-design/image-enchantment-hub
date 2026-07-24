@@ -385,7 +385,8 @@ const Index = () => {
           customPrompt,
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
-          fpMode
+          fpMode,
+          allKeys.openrouter.length > 0 ? allKeys.openrouter : undefined
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
