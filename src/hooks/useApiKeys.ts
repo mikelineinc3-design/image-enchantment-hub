@@ -50,7 +50,8 @@ export function useApiKeys() {
             openai: [],
             groq: [],
             cloudconvert: [],
-            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0, cloudconvert: 0 }
+            openrouter: [],
+            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0, cloudconvert: 0, openrouter: 0 }
           });
         } else {
           setConfig({
@@ -58,11 +59,13 @@ export function useApiKeys() {
             openai: parsed.openai || [],
             groq: parsed.groq || [],
             cloudconvert: parsed.cloudconvert || [],
+            openrouter: parsed.openrouter || [],
             currentIndex: {
               gemini: parsed.currentIndex?.gemini || 0,
               openai: parsed.currentIndex?.openai || 0,
               groq: parsed.currentIndex?.groq || 0,
               cloudconvert: parsed.currentIndex?.cloudconvert || 0,
+              openrouter: parsed.currentIndex?.openrouter || 0,
             }
           });
         }
