@@ -258,6 +258,27 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
               generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
             }),
           });
+        } else if (keyType === 'openrouter') {
+          response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemma-4-31b-it:free",
+              messages: [
+                { role: "system", content: systemPrompt },
+                isVectorPayload
+                  ? { role: "user", content: vectorUserText }
+                  : {
+                      role: "user",
+                      content: [
+                        { type: "text", text: rasterUserTextOpenAI },
+                        { type: "image_url", image_url: { url: imageBase64 } }
+                      ]
+                    }
+              ],
+              max_tokens: 1000
+            }),
+          });
         } else {
           // Lovable AI Gateway
           response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
