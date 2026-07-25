@@ -366,12 +366,15 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
         if (!response.ok) {
           const errorText = await response.text().catch(() => '');
           console.error(`[${keyType}] API error ${response.status}:`, errorText.slice(0, 500));
+          const isImageTooLarge = /image too large|too many pixels|image_too_large|max.*pixels/i.test(errorText);
           lastFailure = {
             provider: keyType,
             status: response.status >= 500 ? 503 : response.status,
-            code: 'provider_error',
-            message: `${keyType.toUpperCase()} error (${response.status}). Trying next key if available.`,
-            retryable: response.status >= 500,
+            code: isImageTooLarge ? 'image_too_large' : 'provider_error',
+            message: isImageTooLarge
+              ? `${keyType.toUpperCase()} rejected the image as too large. Trying next provider.`
+              : `${keyType.toUpperCase()} error (${response.status}). Trying next key if available.`,
+            retryable: response.status >= 500 || isImageTooLarge,
           };
           failures.push(lastFailure);
           continue;
