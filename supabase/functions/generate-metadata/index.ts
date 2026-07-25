@@ -476,9 +476,14 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
     }
 
     // All keys failed
-    const selectedFailure = failures.find((failure) => failure.code === 'payment_required')
+    const userFailures = failures.filter((f) => f.provider !== 'lovable');
+    const selectedFailure = userFailures.find((failure) => failure.code === 'payment_required')
+      || userFailures.find((failure) => failure.code === 'rate_limited')
+      || userFailures.find((failure) => failure.code === 'invalid_api_key')
+      || userFailures.find((failure) => failure.code === 'provider_error')
+      || userFailures[0]
+      || failures.find((failure) => failure.code === 'payment_required')
       || failures.find((failure) => failure.code === 'rate_limited')
-      || (failures.length > 0 && failures.every((failure) => failure.code === 'invalid_api_key') ? failures[0] : null)
       || lastFailure;
 
     console.error('All API keys failed:', selectedFailure);
