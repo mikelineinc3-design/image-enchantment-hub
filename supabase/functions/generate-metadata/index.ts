@@ -259,11 +259,11 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             }),
           });
         } else if (keyType === 'agentrouter') {
-          response = await fetch("https://agentrouter.ai/api/v1/chat/completions", {
+          response = await fetch("https://agentrouter.org/v1/chat/completions", {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "google/gemma-4-31b-it:free",
+              model: "gpt-4o-mini",
               messages: [
                 { role: "system", content: systemPrompt },
                 isVectorPayload
