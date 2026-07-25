@@ -223,7 +223,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             body: JSON.stringify({
               model: isVectorPayload
                 ? "llama-3.3-70b-versatile"
-                : "meta-llama/llama-4-scout-17b-16e-instruct",
+                : "qwen/qwen3.6-27b",
               messages: [
                 { role: "system", content: systemPrompt },
                 isVectorPayload
