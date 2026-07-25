@@ -91,7 +91,16 @@ export async function generateMicrostockMetadata(
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
   let lastErrorCode: string | undefined;
-  
+
+  // Vector native payloads (raw EPS/SVG text-as-dataURL) must NOT be rasterized here.
+  // For raster images, downscale a copy for the AI request only — the exported file is untouched.
+  const isVectorPayload = fileType === 'eps' || fileType === 'svg';
+  const isRasterDataUrl = imageDataUrl.startsWith('data:image/') &&
+    !imageDataUrl.startsWith('data:image/svg');
+  const visionPayload = (!isVectorPayload && isRasterDataUrl)
+    ? await createVisionPreview(imageDataUrl)
+    : imageDataUrl;
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       console.log('[metadataGenerator] invoke', {
@@ -101,10 +110,11 @@ export async function generateMicrostockMetadata(
         groqKeys: groqApiKeys?.length || 0,
         geminiKeys: geminiApiKeys?.length || 0,
         agentrouterKeys: agentrouterApiKeys?.length || 0,
-        imageBase64Prefix: imageDataUrl.slice(0, 40),
+        imageBase64Prefix: visionPayload.slice(0, 40),
+        payloadBytes: visionPayload.length,
       });
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode, agentrouterApiKeys }
+        body: { imageBase64: visionPayload, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode, agentrouterApiKeys }
       });
 
       if (error) {
