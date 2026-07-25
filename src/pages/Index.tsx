@@ -254,7 +254,7 @@ const Index = () => {
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
           fpMode,
-          allKeys.openrouter.length > 0 ? allKeys.openrouter : undefined
+          allKeys.agentrouter.length > 0 ? allKeys.agentrouter : undefined
         );
         const finalAsset = embedIptcXmpMetadata(
           sourceDataUrl,
@@ -386,7 +386,7 @@ const Index = () => {
           allKeys.groq.length > 0 ? allKeys.groq : undefined,
           allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
           fpMode,
-          allKeys.openrouter.length > 0 ? allKeys.openrouter : undefined
+          allKeys.agentrouter.length > 0 ? allKeys.agentrouter : undefined
         );
         
         // Embed IPTC/XMP metadata into the enhanced image (only for JPEG)
@@ -565,7 +565,7 @@ const Index = () => {
             openaiKeys={getKeys('openai')}
             groqKeys={getKeys('groq')}
             cloudconvertKeys={getKeys('cloudconvert')}
-            openrouterKeys={getKeys('openrouter')}
+            agentrouterKeys={getKeys('agentrouter')}
             onAddKey={addKey}
             onRemoveKey={removeKey}
           />

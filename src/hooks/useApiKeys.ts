@@ -2,20 +2,20 @@ import { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'ai_api_keys';
 
-export type ApiProvider = 'gemini' | 'openai' | 'groq' | 'cloudconvert' | 'openrouter';
+export type ApiProvider = 'gemini' | 'openai' | 'groq' | 'cloudconvert' | 'agentrouter';
 
 export interface ApiKeyConfig {
   gemini: string[];
   openai: string[];
   groq: string[];
   cloudconvert: string[];
-  openrouter: string[];
+  agentrouter: string[];
   currentIndex: {
     gemini: number;
     openai: number;
     groq: number;
     cloudconvert: number;
-    openrouter: number;
+    agentrouter: number;
   };
 }
 
@@ -24,7 +24,7 @@ const PROVIDER_LIMITS: Record<ApiProvider, number> = {
   openai: 3,
   groq: 3,
   cloudconvert: 10,
-  openrouter: 5,
+  agentrouter: 5,
 };
 
 const defaultConfig: ApiKeyConfig = {
@@ -32,8 +32,8 @@ const defaultConfig: ApiKeyConfig = {
   openai: [],
   groq: [],
   cloudconvert: [],
-  openrouter: [],
-  currentIndex: { gemini: 0, openai: 0, groq: 0, cloudconvert: 0, openrouter: 0 }
+  agentrouter: [],
+  currentIndex: { gemini: 0, openai: 0, groq: 0, cloudconvert: 0, agentrouter: 0 }
 };
 
 export function useApiKeys() {
@@ -50,8 +50,8 @@ export function useApiKeys() {
             openai: [],
             groq: [],
             cloudconvert: [],
-            openrouter: [],
-            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0, cloudconvert: 0, openrouter: 0 }
+            agentrouter: [],
+            currentIndex: { gemini: parsed.currentIndex || 0, openai: 0, groq: 0, cloudconvert: 0, agentrouter: 0 }
           });
         } else {
           setConfig({
@@ -59,13 +59,13 @@ export function useApiKeys() {
             openai: parsed.openai || [],
             groq: parsed.groq || [],
             cloudconvert: parsed.cloudconvert || [],
-            openrouter: parsed.openrouter || [],
+            agentrouter: parsed.agentrouter || [],
             currentIndex: {
               gemini: parsed.currentIndex?.gemini || 0,
               openai: parsed.currentIndex?.openai || 0,
               groq: parsed.currentIndex?.groq || 0,
               cloudconvert: parsed.currentIndex?.cloudconvert || 0,
-              openrouter: parsed.currentIndex?.openrouter || 0,
+              agentrouter: parsed.currentIndex?.agentrouter || 0,
             }
           });
         }
@@ -110,11 +110,11 @@ export function useApiKeys() {
     openai: config.openai,
     groq: config.groq,
     cloudconvert: config.cloudconvert,
-    openrouter: config.openrouter,
+    agentrouter: config.agentrouter,
   });
   const getKeyCount = (provider: ApiProvider) => config[provider].length;
   const getTotalKeyCount = () =>
-    config.gemini.length + config.openai.length + config.groq.length + config.cloudconvert.length + config.openrouter.length;
+    config.gemini.length + config.openai.length + config.groq.length + config.cloudconvert.length + config.agentrouter.length;
   const getKeyLimit = (provider: ApiProvider) => PROVIDER_LIMITS[provider];
 
   return {

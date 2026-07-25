@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'openrouter';
+  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'agentrouter';
 }
 
 interface ProviderFailure {
@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, openrouterApiKeys } = await req.json();
+    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, agentrouterApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -90,8 +90,8 @@ serve(async (req) => {
       for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
     }
     // OpenRouter keys — OpenAI-compatible, vision-capable fallback
-    if (openrouterApiKeys && Array.isArray(openrouterApiKeys)) {
-      for (const k of openrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openrouter' });
+    if (agentrouterApiKeys && Array.isArray(agentrouterApiKeys)) {
+      for (const k of agentrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'agentrouter' });
     }
 
     // Lovable AI Gateway as final fallback
@@ -258,8 +258,8 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
               generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
             }),
           });
-        } else if (keyType === 'openrouter') {
-          response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        } else if (keyType === 'agentrouter') {
+          response = await fetch("https://agentrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
