@@ -89,7 +89,7 @@ serve(async (req) => {
     if (groqApiKeys && Array.isArray(groqApiKeys)) {
       for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
     }
-    // OpenRouter keys — OpenAI-compatible, vision-capable fallback
+    // AgentRouter keys — OpenAI-compatible, vision-capable fallback
     if (agentrouterApiKeys && Array.isArray(agentrouterApiKeys)) {
       for (const k of agentrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'agentrouter' });
     }
