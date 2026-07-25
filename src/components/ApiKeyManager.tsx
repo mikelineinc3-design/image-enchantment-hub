@@ -20,7 +20,7 @@ const PROVIDER_META: Record<ApiProvider, { label: string; limit: number; color: 
   openai: { label: 'OpenAI', limit: 3, color: 'text-green-500', help: { href: 'https://platform.openai.com/api-keys', label: 'OpenAI Platform' } },
   groq: { label: 'Groq', limit: 3, color: 'text-orange-500', help: { href: 'https://console.groq.com/keys', label: 'Groq Console' } },
   cloudconvert: { label: 'CloudConvert', limit: 10, color: 'text-blue-500', help: { href: 'https://cloudconvert.com/dashboard/api/v2/keys', label: 'CloudConvert Dashboard' } },
-  agentrouter: { label: 'OpenRouter', limit: 5, color: 'text-purple-500', help: { href: 'https://agentrouter.ai/keys', label: 'OpenRouter Keys' } },
+  agentrouter: { label: 'AgentRouter', limit: 5, color: 'text-purple-500', help: { href: 'https://agentrouter.org/console/token', label: 'AgentRouter Keys' } },
 };
 
 interface ProviderSectionProps {
