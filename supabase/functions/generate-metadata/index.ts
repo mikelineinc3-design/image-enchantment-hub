@@ -328,7 +328,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             provider: keyType,
             status: 402,
             code: 'payment_required',
-            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, or Groq API key in AI API Keys, or add AI credits, then try again.',
+            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, Groq, or AgentRouter API key in AI API Keys, or add AI credits, then try again.',
             retryable: false,
           };
           failures.push(lastFailure);
