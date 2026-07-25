@@ -11,6 +11,52 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Downscale a raster data URL so the longest edge is <= maxLongEdge px.
+ * Returns a JPEG data URL. If the source is already small enough, returns it unchanged.
+ * Used ONLY for the AI vision request payload — never for the exported file.
+ */
+export async function createVisionPreview(
+  dataUrl: string,
+  maxLongEdge = 1568,
+  quality = 0.85
+): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:image/')) return dataUrl;
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.crossOrigin = 'anonymous';
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('vision preview image load failed'));
+      el.src = dataUrl;
+    });
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (!w || !h) return dataUrl;
+    const longest = Math.max(w, h);
+    if (longest <= maxLongEdge) return dataUrl;
+    const scale = maxLongEdge / longest;
+    const tw = Math.max(1, Math.round(w * scale));
+    const th = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = tw;
+    canvas.height = th;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, tw, th);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, tw, th);
+    const out = canvas.toDataURL('image/jpeg', quality);
+    console.log('[visionPreview] resized', { from: `${w}x${h}`, to: `${tw}x${th}`, bytes: out.length });
+    return out;
+  } catch (err) {
+    console.warn('[visionPreview] failed, using original', err);
+    return dataUrl;
+  }
+}
+
 async function readFunctionError(error: unknown): Promise<{ message: string; code?: string }> {
   const fallback = error instanceof Error ? error.message : 'Failed to generate metadata';
   const response = (error as { context?: Response })?.context;
