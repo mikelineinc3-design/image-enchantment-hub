@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'openrouter';
+  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'agentrouter';
 }
 
 interface ProviderFailure {
@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, openrouterApiKeys } = await req.json();
+    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, agentrouterApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -89,9 +89,9 @@ serve(async (req) => {
     if (groqApiKeys && Array.isArray(groqApiKeys)) {
       for (const k of groqApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'groq' });
     }
-    // OpenRouter keys — OpenAI-compatible, vision-capable fallback
-    if (openrouterApiKeys && Array.isArray(openrouterApiKeys)) {
-      for (const k of openrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openrouter' });
+    // AgentRouter keys — OpenAI-compatible, vision-capable fallback
+    if (agentrouterApiKeys && Array.isArray(agentrouterApiKeys)) {
+      for (const k of agentrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'agentrouter' });
     }
 
     // Lovable AI Gateway as final fallback
@@ -223,7 +223,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             body: JSON.stringify({
               model: isVectorPayload
                 ? "llama-3.3-70b-versatile"
-                : "meta-llama/llama-4-scout-17b-16e-instruct",
+                : "qwen/qwen3.6-27b",
               messages: [
                 { role: "system", content: systemPrompt },
                 isVectorPayload
@@ -258,12 +258,12 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
               generationConfig: { response_mime_type: "application/json", maxOutputTokens: 1500 }
             }),
           });
-        } else if (keyType === 'openrouter') {
-          response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        } else if (keyType === 'agentrouter') {
+          response = await fetch("https://agentrouter.org/v1/chat/completions", {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "google/gemma-4-31b-it:free",
+              model: "gpt-4o-mini",
               messages: [
                 { role: "system", content: systemPrompt },
                 isVectorPayload
@@ -328,7 +328,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             provider: keyType,
             status: 402,
             code: 'payment_required',
-            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, or Groq API key in AI API Keys, or add AI credits, then try again.',
+            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, Groq, or AgentRouter API key in AI API Keys, or add AI credits, then try again.',
             retryable: false,
           };
           failures.push(lastFailure);
@@ -476,9 +476,14 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
     }
 
     // All keys failed
-    const selectedFailure = failures.find((failure) => failure.code === 'payment_required')
+    const userFailures = failures.filter((f) => f.provider !== 'lovable');
+    const selectedFailure = userFailures.find((failure) => failure.code === 'payment_required')
+      || userFailures.find((failure) => failure.code === 'rate_limited')
+      || userFailures.find((failure) => failure.code === 'invalid_api_key')
+      || userFailures.find((failure) => failure.code === 'provider_error')
+      || userFailures[0]
+      || failures.find((failure) => failure.code === 'payment_required')
       || failures.find((failure) => failure.code === 'rate_limited')
-      || (failures.length > 0 && failures.every((failure) => failure.code === 'invalid_api_key') ? failures[0] : null)
       || lastFailure;
 
     console.error('All API keys failed:', selectedFailure);

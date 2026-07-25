@@ -41,7 +41,7 @@ export async function generateMicrostockMetadata(
   groqApiKeys?: string[],
   geminiApiKeys?: string[],
   fpMode = false,
-  openrouterApiKeys?: string[]
+  agentrouterApiKeys?: string[]
 ): Promise<MicrostockMetadata> {
   let lastError: Error | null = null;
   let lastErrorCode: string | undefined;
@@ -54,11 +54,11 @@ export async function generateMicrostockMetadata(
         openaiKeys: customApiKeys?.length || 0,
         groqKeys: groqApiKeys?.length || 0,
         geminiKeys: geminiApiKeys?.length || 0,
-        openrouterKeys: openrouterApiKeys?.length || 0,
+        agentrouterKeys: agentrouterApiKeys?.length || 0,
         imageBase64Prefix: imageDataUrl.slice(0, 40),
       });
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode, openrouterApiKeys }
+        body: { imageBase64: imageDataUrl, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode, agentrouterApiKeys }
       });
 
       if (error) {
