@@ -7,7 +7,7 @@ import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
 import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode, UpscaleTarget } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
-import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl } from '@/lib/imageEnhancer';
+import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl, convertWebpToJpeg } from '@/lib/imageEnhancer';
 import { ensureJpegMinSize } from '@/lib/fpInflater';
 import { generateMicrostockMetadata } from '@/lib/metadataGenerator';
 import { rasterizeSvgDataUrlToPng } from '@/lib/vectorRasterizer';
@@ -67,6 +67,18 @@ const Index = () => {
 
     for (const batch of uploadBatches) {
       await Promise.all(batch.map(async (file) => {
+        // WebP files must be re-encoded to actual JPEG bytes before anything
+        // else touches them — see convertWebpToJpeg for why.
+        const isWebp = file.type === 'image/webp' || file.name.toLowerCase().endsWith('.webp');
+        if (isWebp) {
+          try {
+            file = await convertWebpToJpeg(file);
+          } catch (e) {
+            console.error('WebP conversion failed:', e);
+            toast.error(`Could not convert ${file.name} from WebP`);
+            return;
+          }
+        }
         const id = generateId();
         const imageFormat = detectImageFormat(file);
         const isVector = imageFormat === 'eps' || imageFormat === 'svg';
