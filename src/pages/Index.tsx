@@ -5,7 +5,7 @@ import { PhotoCard } from '@/components/PhotoCard';
 import { StepsIndicator } from '@/components/StepsIndicator';
 import { BatchActions } from '@/components/BatchActions';
 import { ApiKeyManager } from '@/components/ApiKeyManager';
-import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode, UpscaleTarget } from '@/types/photo';
+import { PhotoFile, FilterType, FileType, ImageFormat, MetadataMode, UpscaleTarget, MicrostockMetadata } from '@/types/photo';
 import { extractExif, generateAiExif, fileToDataUrl } from '@/lib/exif';
 import { enhanceImageWithAI, enhanceImageLocally, embedIptcXmpMetadata, detectImageFormat, validateImageDataUrl, convertWebpToJpeg } from '@/lib/imageEnhancer';
 import { ensureJpegMinSize } from '@/lib/fpInflater';
@@ -303,13 +303,14 @@ const Index = () => {
       const originalHeight = photo.rawExif.height || photo.originalExif.height || 0;
       
       let enhancedDataUrl: string;
+      let inlineMetadata: MicrostockMetadata | undefined;
       
       if (hasFilters) {
         // Get all API keys for rotation
         const allKeys = getAllKeys();
         
         try {
-          enhancedDataUrl = await enhanceImageWithAI(
+          const result = await enhanceImageWithAI(
             sourceDataUrl,
             photo.selectedFilters,
             photo.rawExif,
@@ -317,8 +318,11 @@ const Index = () => {
             originalHeight,
             photo.imageFormat,
             allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
-            upscaleTarget
+            upscaleTarget,
+            { fileType: photo.fileType, mode: metadataMode, customPrompt, fpMode }
           );
+          enhancedDataUrl = result.enhancedDataUrl;
+          inlineMetadata = result.metadata;
         } catch (aiError) {
           console.warn('AI enhancement failed, using local fallback:', aiError);
           enhancedDataUrl = await enhanceImageLocally(
@@ -390,7 +394,9 @@ const Index = () => {
       
       const allKeys = getAllKeys();
       try {
-        const metadata = await generateMicrostockMetadata(
+        // If the combined enhance+metadata Gemini call already returned metadata,
+        // reuse it instead of making a second Gemini request for the same photo.
+        const metadata = inlineMetadata || await generateMicrostockMetadata(
           enhancedDataUrl,
           photo.fileType,
           allKeys.openai.length > 0 ? allKeys.openai : undefined,
