@@ -10,7 +10,7 @@ const MAX_BASE64_SIZE = 20 * 1024 * 1024;
 
 interface ApiKeyEntry {
   key: string;
-  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'agentrouter';
+  type: 'lovable' | 'openai' | 'groq' | 'gemini' | 'agentrouter' | 'openrouter';
 }
 
 interface ProviderFailure {
@@ -27,7 +27,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, agentrouterApiKeys } = await req.json();
+    const { imageBase64, fileType = 'jpg', customApiKeys, mode = 'default', customPrompt, groqApiKeys, geminiApiKeys, fpMode = false, agentrouterApiKeys, openrouterApiKeys } = await req.json();
     
     // Input validation
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -92,6 +92,11 @@ serve(async (req) => {
     // AgentRouter keys — OpenAI-compatible, vision-capable fallback
     if (agentrouterApiKeys && Array.isArray(agentrouterApiKeys)) {
       for (const k of agentrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'agentrouter' });
+    }
+
+    // OpenRouter keys — free-tier vision-capable fallback
+    if (openrouterApiKeys && Array.isArray(openrouterApiKeys)) {
+      for (const k of openrouterApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'openrouter' });
     }
 
     // Lovable AI Gateway as final fallback
@@ -283,6 +288,33 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
               max_tokens: 1000
             }),
           });
+        } else if (keyType === 'openrouter') {
+          response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+              "HTTP-Referer": "https://image-enchantment-hub.lovable.app",
+              "X-Title": "Image Enchantment Hub",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            body: JSON.stringify({
+              model: "google/gemma-4-31b-it:free",
+              messages: [
+                { role: "system", content: systemPrompt },
+                isVectorPayload
+                  ? { role: "user", content: vectorUserText }
+                  : {
+                      role: "user",
+                      content: [
+                        { type: "text", text: rasterUserTextOpenAI },
+                        { type: "image_url", image_url: { url: imageBase64 } }
+                      ]
+                    }
+              ],
+              max_tokens: 1000
+            }),
+          });
         } else {
           // Lovable AI Gateway
           response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -332,7 +364,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             provider: keyType,
             status: 402,
             code: 'payment_required',
-            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, Groq, or AgentRouter API key in AI API Keys, or add AI credits, then try again.',
+            message: 'Default AI credits are exhausted. Add an OpenAI, Gemini, Groq, AgentRouter, or OpenRouter API key in AI API Keys, or add AI credits, then try again.',
             retryable: false,
           };
           failures.push(lastFailure);
