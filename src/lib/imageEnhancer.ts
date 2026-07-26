@@ -497,7 +497,50 @@ export function detectImageFormat(file: File): ImageFormat {
   if (file.type === 'application/postscript' || name.endsWith('.eps')) return 'eps';
   if (file.type === 'image/svg+xml' || name.endsWith('.svg')) return 'svg';
   if (file.type === 'image/png') return 'png';
+  // WebP is converted to a real JPEG File before this ever runs (see
+  // convertWebpToJpeg in Index.tsx's upload handler) — falls through to jpeg.
   return 'jpeg';
+}
+
+// Convert a WebP File into a genuine JPEG File via canvas re-encoding.
+// This must run BEFORE the file enters the rest of the pipeline (EXIF
+// embedding, edge function calls, etc.), since those assume real JPEG bytes —
+// a file merely relabeled "jpeg" while still containing WebP bytes would
+// corrupt downstream processing.
+export function convertWebpToJpeg(file: File, quality = 0.92): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Canvas context unavailable'));
+        return;
+      }
+      // Flatten onto white in case the WebP had alpha (JPEG has no alpha channel).
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(objectUrl);
+        if (!blob) {
+          reject(new Error('WebP to JPEG conversion failed'));
+          return;
+        }
+        const newName = file.name.replace(/\.webp$/i, '.jpg');
+        resolve(new File([blob], newName, { type: 'image/jpeg' }));
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Failed to load WebP image'));
+    };
+    img.src = objectUrl;
+  });
 }
 
 export function detectFormatFromDataUrl(dataUrl: string): ImageFormat {
