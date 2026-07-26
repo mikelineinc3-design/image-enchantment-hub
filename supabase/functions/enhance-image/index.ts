@@ -55,22 +55,21 @@ serve(async (req) => {
       filterList = ['default'];
     }
     
-    // Collect API keys - custom keys first, then Lovable key
-    const apiKeys: string[] = [];
+    // Collect API keys — user's Gemini keys first (correct endpoint below),
+    // then Lovable as last-resort fallback.
+    // NOTE: the frontend passes Gemini AI Studio keys into this `customApiKeys`
+    // param (see Index.tsx). They must be sent to Gemini's own endpoint, not
+    // Lovable's gateway — Gemini keys are not valid Lovable gateway tokens.
+    interface EnhanceKeyEntry { key: string; type: 'gemini' | 'lovable'; }
+    const apiKeys: EnhanceKeyEntry[] = [];
+    const isValidKey = (k: unknown): k is string =>
+      typeof k === 'string' && k.trim().length >= 20 && k.trim().length <= 500;
     if (customApiKeys && Array.isArray(customApiKeys)) {
-      apiKeys.push(
-        ...customApiKeys.filter(
-          (k: unknown) =>
-            typeof k === 'string' &&
-            (k as string).length >= 20 &&
-            (k as string).length <= 200 &&
-            /^[A-Za-z0-9_\-]+$/.test(k as string)
-        )
-      );
+      for (const k of customApiKeys) if (isValidKey(k)) apiKeys.push({ key: k.trim(), type: 'gemini' });
     }
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (LOVABLE_API_KEY) {
-      apiKeys.push(LOVABLE_API_KEY);
+      apiKeys.push({ key: LOVABLE_API_KEY, type: 'lovable' });
     }
     
     if (apiKeys.length === 0) {
@@ -104,77 +103,117 @@ serve(async (req) => {
     // Try each API key until one works
     let lastError = null;
     for (let i = 0; i < apiKeys.length; i++) {
-      const apiKey = apiKeys[i];
+      const { key: apiKey, type: keyType } = apiKeys[i];
       try {
-        console.log(`Trying API key ${i + 1}/${apiKeys.length}`);
+        console.log(`Trying ${keyType} API key ${i + 1}/${apiKeys.length}`);
         
         // Add timeout to prevent hanging connections
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-        
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image-preview",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: prompt },
-                  { type: "image_url", image_url: { url: imageBase64 } }
-                ]
-              }
-            ],
-            modalities: ["image", "text"]
-          }),
-          signal: controller.signal
-        });
+
+        let response: Response;
+
+        if (keyType === 'gemini') {
+          const base64Match = imageBase64.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+          const mimeType = base64Match?.[1] || 'image/jpeg';
+          const rawBase64 = base64Match?.[2] || imageBase64.split(',').pop() || '';
+          response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{
+                  role: "user",
+                  parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: mimeType, data: rawBase64 } }
+                  ]
+                }],
+                generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
+              }),
+              signal: controller.signal
+            }
+          );
+        } else {
+          // Lovable AI Gateway (last-resort fallback)
+          response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash-image-preview",
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: prompt },
+                    { type: "image_url", image_url: { url: imageBase64 } }
+                  ]
+                }
+              ],
+              modalities: ["image", "text"]
+            }),
+            signal: controller.signal
+          });
+        }
         
         clearTimeout(timeoutId);
 
         if (response.status === 429) {
-          console.log('Rate limited, trying next key...');
+          console.log(`[${keyType}] Rate limited, trying next key...`);
           lastError = new Error('Rate limited');
           continue;
         }
 
         if (response.status === 402) {
-          console.log('Payment required, trying next key...');
+          console.log(`[${keyType}] Payment required, trying next key...`);
           lastError = new Error('Payment required');
           continue;
         }
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API error:", response.status, errorText);
+          const errorText = await response.text().catch(() => '');
+          console.error(`[${keyType}] API error:`, response.status, errorText.slice(0, 500));
           lastError = new Error(`API error: ${response.status}`);
           continue;
         }
 
         const data = await response.json();
-        let enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        let enhancedImageUrl: string | undefined;
+        let messageText: string | undefined;
+
+        if (keyType === 'gemini') {
+          const parts = data.candidates?.[0]?.content?.parts || [];
+          const imagePart = parts.find((p: { inlineData?: { data?: string; mimeType?: string } }) => p.inlineData?.data);
+          if (imagePart?.inlineData) {
+            enhancedImageUrl = `data:${imagePart.inlineData.mimeType || 'image/png'};base64,${imagePart.inlineData.data}`;
+          }
+          messageText = parts.find((p: { text?: string }) => p.text)?.text;
+        } else {
+          enhancedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+          messageText = data.choices?.[0]?.message?.content;
+        }
         
         if (!enhancedImageUrl) {
-          console.error("No image in response");
+          console.error(`[${keyType}] No image in response`);
           lastError = new Error("No enhanced image returned");
           continue;
         }
 
         // Validate the enhanced image URL format
         if (!enhancedImageUrl.startsWith('data:image/')) {
-          console.error("Invalid enhanced image format returned");
+          console.error(`[${keyType}] Invalid enhanced image format returned`);
           lastError = new Error("Invalid enhanced image format");
           continue;
         }
 
-        console.log(`Image enhanced successfully. Original: ${isPng ? 'PNG' : 'JPEG'}, Result format: ${enhancedImageUrl.substring(0, 30)}...`);
+        console.log(`Image enhanced successfully via ${keyType}. Original: ${isPng ? 'PNG' : 'JPEG'}, Result format: ${enhancedImageUrl.substring(0, 30)}...`);
         return new Response(JSON.stringify({ 
           enhancedImage: enhancedImageUrl,
-          message: data.choices?.[0]?.message?.content || "Image enhanced successfully",
+          message: messageText || "Image enhanced successfully",
           originalFormat: isPng ? 'png' : 'jpeg',
           preserveFormat: preserveFormat
         }), {
@@ -185,7 +224,7 @@ serve(async (req) => {
           console.error('Request timed out');
           lastError = new Error('Request timed out');
         } else {
-          console.error('Error with API key:', error);
+          console.error(`Error with ${keyType} API key:`, error);
           lastError = error instanceof Error ? error : new Error(String(error));
         }
       }
