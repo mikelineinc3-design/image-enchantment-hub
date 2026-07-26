@@ -480,22 +480,21 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
 
     // All keys failed
     const userFailures = failures.filter((f) => f.provider !== 'lovable');
-    const selectedFailure = userFailures.find((failure) => failure.code === 'payment_required')
-      || userFailures.find((failure) => failure.code === 'rate_limited')
-      || userFailures.find((failure) => failure.code === 'invalid_api_key')
-      || userFailures.find((failure) => failure.code === 'provider_error')
-      || userFailures[0]
-      || failures.find((failure) => failure.code === 'payment_required')
-      || failures.find((failure) => failure.code === 'rate_limited')
-      || lastFailure;
 
-    console.error('All API keys failed:', selectedFailure);
+    for (const failure of userFailures) {
+      console.error(`All API keys failed: ${failure.provider}: ${failure.message} (code: ${failure.code})`);
+    }
+
+    const combinedMessage = userFailures.length > 0
+      ? userFailures.map((f) => `${f.provider.toUpperCase()}: ${f.message} (code: ${f.code})`).join('\n')
+      : 'Metadata service unavailable. Please try again.';
+
     return new Response(JSON.stringify({
-      error: selectedFailure?.message || 'Metadata service unavailable. Please try again.',
-      code: selectedFailure?.code || 'metadata_unavailable',
-      retryable: selectedFailure?.retryable ?? true,
+      error: combinedMessage,
+      code: 'all_providers_failed',
+      retryable: true,
     }), {
-      status: selectedFailure?.status || 503,
+      status: 502,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
