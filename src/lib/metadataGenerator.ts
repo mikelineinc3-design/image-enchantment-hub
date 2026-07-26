@@ -1,6 +1,7 @@
 import { FileType, MicrostockMetadata, MetadataMode } from '@/types/photo';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeTitle, sanitizeKeywords } from './iptcXmpWriter';
+import { runGeminiThrottled } from './geminiRateLimiter';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
@@ -78,6 +79,109 @@ async function readFunctionError(error: unknown): Promise<{ message: string; cod
   return { message: fallback };
 }
 
+// Gemini's free tier applies stricter (often zero) quota to requests coming
+// from cloud/datacenter IPs (e.g. Supabase Edge Functions run on Deno
+// Deploy) even when the same key works fine from a normal browser/residential
+// connection — this is a documented Google-side restriction, not a bug in
+// our code. So for Gemini specifically, call it DIRECTLY FROM THE BROWSER
+// (this function), using the person's own network connection, instead of
+// proxying through the edge function.
+function buildMetadataPrompt(fileType: FileType, mode: MetadataMode, customPrompt: string | undefined, fpMode: boolean) {
+  const isVector = fileType === 'eps' || fileType === 'svg';
+  const assetFormatLabel = isVector ? 'VECTOR (EPS/SVG)' : `RASTER PHOTO (${fileType.toUpperCase()})`;
+  const vectorRule = isVector
+    ? "Include vector-specific keywords (vector, eps, illustration, clipart, graphic design) where they genuinely fit."
+    : "STRICTLY DO NOT include 'vector', 'eps', 'illustration', or 'clipart' keywords — this is a raster photograph.";
+  const titleLimit = fpMode ? 99 : 200;
+  const titleMin = fpMode ? 50 : 100;
+  const keywordsLimit = fpMode ? 48 : 49;
+
+  let prompt = `You are an automated microstock metadata engine for Adobe Stock and Shutterstock. Output ONLY a single strict JSON object — no prose, no greetings, no markdown, no code fences.
+
+ACTIVE ASSET FORMAT: ${assetFormatLabel}
+${vectorRule}
+
+GENERATE THESE FIELDS:
+1. TITLE: exactly between ${titleMin} and ${titleLimit} characters, literal description first, then embed long-tail keywords.
+2. SUGGESTED FILENAME: lowercase hyphen-separated, ending in .${fileType}.
+3. KEYWORDS: exactly ${keywordsLimit} or fewer, all lowercase, ~70% single-word / 30% two-word phrases, highest-demand terms first, no duplicates. ${vectorRule}
+4. adobeCategory and shutterstockCategory: one official category name each.
+5. Always include: copyright: "Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.", rights: "Microstock Commercial License", author: "Microstock Contributor".
+
+Return ONLY this JSON object:
+{"filename":"...","title":"...","keywords":"...","adobeCategory":"...","shutterstockCategory":"...","copyright":"Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.","rights":"Microstock Commercial License","author":"Microstock Contributor"}`;
+
+  if (mode === 'data') {
+    prompt += `\n\nAlso include "aiTrainingNote" (<=500 chars) describing what AI models could learn from this image. Append it to the JSON above.`;
+  }
+  if (customPrompt && customPrompt.trim()) {
+    prompt += `\n\nADDITIONAL USER INSTRUCTIONS (apply to title and keywords):\n${customPrompt.trim()}`;
+  }
+  const userText = isVector
+    ? `Generate microstock metadata for a VECTOR ${fileType.toUpperCase()} asset. Respond with the required JSON only.`
+    : 'Analyze the attached image and respond with the required JSON only.';
+  return { systemPrompt: prompt, userText, isVector };
+}
+
+async function tryGeminiClientSide(
+  visionPayload: string,
+  fileType: FileType,
+  mode: MetadataMode,
+  customPrompt: string | undefined,
+  fpMode: boolean,
+  apiKey: string
+): Promise<MicrostockMetadata | null> {
+  const { systemPrompt, userText, isVector } = buildMetadataPrompt(fileType, mode, customPrompt, fpMode);
+  const base64Match = visionPayload.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+  const mimeType = base64Match?.[1] || 'image/jpeg';
+  const rawBase64 = base64Match?.[2] || visionPayload.split(',').pop() || '';
+
+  const parts: Array<Record<string, unknown>> = [{ text: `${systemPrompt}\n\n${userText}` }];
+  if (!isVector) parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts }],
+        generationConfig: { response_mime_type: 'application/json', maxOutputTokens: 1500 }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    console.warn('[gemini-client] request failed', response.status, errText.slice(0, 200));
+    return null;
+  }
+
+  const data = await response.json();
+  const content = data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || '';
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  let metadata: Record<string, unknown>;
+  try {
+    metadata = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+
+  const sanitizedTitle = sanitizeTitle(String(metadata.title || ''), fpMode ? 99 : 200);
+  const sanitizedKeywords = sanitizeKeywords(String(metadata.keywords || ''), fpMode ? 48 : 49).join(', ');
+  return {
+    filename: String(metadata.filename || `image.${fileType}`),
+    title: sanitizedTitle,
+    description: sanitizedTitle,
+    keywords: sanitizedKeywords,
+    adobeCategory: String(metadata.adobeCategory || 'Lifestyle'),
+    shutterstockCategory: String(metadata.shutterstockCategory || 'Miscellaneous'),
+    aiTrainingNote: typeof metadata.aiTrainingNote === 'string' ? metadata.aiTrainingNote.slice(0, 1000) : undefined,
+  };
+}
+
 export async function generateMicrostockMetadata(
   imageDataUrl: string,
   fileType: FileType,
@@ -102,6 +206,24 @@ export async function generateMicrostockMetadata(
     ? await createVisionPreview(imageDataUrl)
     : imageDataUrl;
 
+  // Try Gemini directly from the browser first — see tryGeminiClientSide for why.
+  if (geminiApiKeys && geminiApiKeys.length > 0) {
+    for (const key of geminiApiKeys) {
+      try {
+        const result = await runGeminiThrottled(() =>
+          tryGeminiClientSide(visionPayload, fileType, mode, customPrompt, fpMode, key)
+        );
+        if (result) {
+          console.log('[metadataGenerator] Gemini (client-side) succeeded');
+          return result;
+        }
+      } catch (e) {
+        console.warn('[gemini-client] key failed, trying next:', e);
+      }
+    }
+    console.log('[metadataGenerator] All client-side Gemini keys failed, falling back to edge function providers');
+  }
+
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       console.log('[metadataGenerator] invoke', {
@@ -116,7 +238,7 @@ export async function generateMicrostockMetadata(
         payloadBytes: visionPayload.length,
       });
       const { data, error } = await supabase.functions.invoke('generate-metadata', {
-        body: { imageBase64: visionPayload, fileType, customApiKeys, mode, customPrompt, groqApiKeys, geminiApiKeys, fpMode, agentrouterApiKeys, openrouterApiKeys }
+        body: { imageBase64: visionPayload, fileType, customApiKeys, mode, customPrompt, groqApiKeys, fpMode, agentrouterApiKeys, openrouterApiKeys }
       });
 
       if (error) {
