@@ -11,6 +11,7 @@ interface ApiKeyManagerProps {
   groqKeys: string[];
   cloudconvertKeys: string[];
   agentrouterKeys: string[];
+  openrouterKeys: string[];
   onAddKey: (provider: ApiProvider, key: string) => boolean;
   onRemoveKey: (provider: ApiProvider, index: number) => void;
 }
@@ -21,6 +22,7 @@ const PROVIDER_META: Record<ApiProvider, { label: string; limit: number; color: 
   groq: { label: 'Groq', limit: 3, color: 'text-orange-500', help: { href: 'https://console.groq.com/keys', label: 'Groq Console' } },
   cloudconvert: { label: 'CloudConvert', limit: 10, color: 'text-blue-500', help: { href: 'https://cloudconvert.com/dashboard/api/v2/keys', label: 'CloudConvert Dashboard' } },
   agentrouter: { label: 'AgentRouter', limit: 5, color: 'text-purple-500', help: { href: 'https://agentrouter.org/console/token', label: 'AgentRouter Keys' } },
+  openrouter: { label: 'OpenRouter', limit: 5, color: 'text-pink-500', help: { href: 'https://openrouter.ai/keys', label: 'OpenRouter Keys' } },
 };
 
 interface ProviderSectionProps {
@@ -105,9 +107,9 @@ function ProviderSection({ provider, keys, onAddKey, onRemoveKey }: ProviderSect
   );
 }
 
-export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKeys, agentrouterKeys, onAddKey, onRemoveKey }: ApiKeyManagerProps) {
+export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKeys, agentrouterKeys, openrouterKeys, onAddKey, onRemoveKey }: ApiKeyManagerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const totalKeys = geminiKeys.length + openaiKeys.length + groqKeys.length + cloudconvertKeys.length + agentrouterKeys.length;
+  const totalKeys = geminiKeys.length + openaiKeys.length + groqKeys.length + cloudconvertKeys.length + agentrouterKeys.length + openrouterKeys.length;
 
   return (
     <div className="p-4 rounded-xl gradient-card border border-border">
@@ -131,6 +133,7 @@ export function ApiKeyManager({ geminiKeys, openaiKeys, groqKeys, cloudconvertKe
           <ProviderSection provider="groq" keys={groqKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
           <ProviderSection provider="cloudconvert" keys={cloudconvertKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
           <ProviderSection provider="agentrouter" keys={agentrouterKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
+          <ProviderSection provider="openrouter" keys={openrouterKeys} onAddKey={onAddKey} onRemoveKey={onRemoveKey} />
         </div>
       )}
     </div>
