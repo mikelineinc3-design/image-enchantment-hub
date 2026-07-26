@@ -1,4 +1,4 @@
-import { FilterType, RawExifData, ImageFormat, UpscaleTarget } from '@/types/photo';
+import { FilterType, RawExifData, ImageFormat, UpscaleTarget, FileType, MicrostockMetadata, MetadataMode } from '@/types/photo';
 import { supabase } from '@/integrations/supabase/client';
 import { embedExifIntoJpeg } from './exifWriter';
 import { generateRawExif } from './exif';
@@ -6,6 +6,7 @@ import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from '
 import { embedMetadataIntoPng } from './pngMetadataWriter';
 import { embedMetadataIntoEpsDataUrl } from './epsMetadataWriter';
 import { embedMetadataIntoSvgDataUrl } from './svgMetadataWriter';
+import { runGeminiThrottled } from './geminiRateLimiter';
 
 // Maximum dimensions to prevent memory issues
 const MAX_DIMENSION = 4000;
@@ -77,6 +78,126 @@ async function hasTransparency(dataUrl: string): Promise<boolean> {
   });
 }
 
+const FILTER_PROMPTS: Record<string, string> = {
+  vibrant: "Enhance with rich, saturated colors. Increase color intensity while maintaining natural look. Make the image pop with vivid tones.",
+  cinematic: "Apply cinematic color grade with subtle teal and orange tones, adjust contrast for movie-like feel. Keep it professional and atmospheric.",
+  natural: "Enhance naturally. Improve exposure, slightly boost colors while maintaining realism. Professional photograph in ideal lighting conditions.",
+  default: "Enhance professionally. Improve overall quality, adjust exposure, increase color vibrancy while keeping it realistic.",
+  product: "Enhance clarity, increase micro-details, improve color accuracy, reduce noise, and apply studio-style lighting with neutral background separation.",
+  sharpener: "Enhance details significantly. Increase sharpness and micro-contrast for crisp, clear edges throughout the image.",
+  hdr: "Improve dynamic range, recover shadow details, highlight texture, and enhance brightness while keeping the image natural and realistic."
+};
+
+function buildInlineMetadataInstruction(fileType: FileType, mode: MetadataMode, customPrompt: string | undefined, fpMode: boolean) {
+  const isVector = fileType === 'eps' || fileType === 'svg';
+  const vectorRule = isVector
+    ? "Include vector-specific keywords (vector, eps, illustration, clipart, graphic design) where they genuinely fit."
+    : "STRICTLY DO NOT include 'vector', 'eps', 'illustration', or 'clipart' keywords — this is a raster photograph.";
+  const titleLimit = fpMode ? 99 : 200;
+  const titleMin = fpMode ? 50 : 100;
+  const keywordsLimit = fpMode ? 48 : 49;
+  let instr = `\n\nAFTER producing the enhanced image, ALSO output a text part containing ONLY this strict JSON object describing the enhanced image (no prose, no markdown fences, nothing else in the text part):
+{"filename":"lowercase-hyphenated.${fileType}","title":"between ${titleMin}-${titleLimit} chars, literal description then long-tail keywords","keywords":"${keywordsLimit} or fewer, lowercase, comma-separated, ~70% single word/30% two-word, top-demand first","adobeCategory":"official Adobe Stock category","shutterstockCategory":"official Shutterstock category","copyright":"Copyright 2026 Adobe Stock / Shutterstock Contributor. All Rights Reserved.","rights":"Microstock Commercial License","author":"Microstock Contributor"}
+${vectorRule}`;
+  if (mode === 'data') {
+    instr += `\nAlso include "aiTrainingNote" (<=500 chars) in that same JSON object.`;
+  }
+  if (customPrompt && customPrompt.trim()) {
+    instr += `\nADDITIONAL USER INSTRUCTIONS (apply to title/keywords): ${customPrompt.trim()}`;
+  }
+  return instr;
+}
+
+interface GeminiEnhanceResult {
+  imageUrl: string;
+  metadata?: MicrostockMetadata;
+}
+
+// Gemini's free tier restricts requests from cloud/datacenter IPs (Supabase
+// Edge Functions run on Deno Deploy) even when the same key works fine from
+// a browser — a documented Google-side restriction. So call Gemini directly
+// from the browser for image enhancement too, instead of via the edge function.
+//
+// This single call ALSO asks Gemini to return metadata JSON in its text
+// response alongside the enhanced image — combining what used to be two
+// separate Gemini requests (enhance + metadata) into one, halving the
+// per-photo request count.
+async function tryGeminiEnhanceClientSide(
+  imageDataUrl: string,
+  filters: FilterType[],
+  isPng: boolean,
+  apiKey: string,
+  metaOpts?: { fileType: FileType; mode: MetadataMode; customPrompt?: string; fpMode: boolean }
+): Promise<GeminiEnhanceResult | null> {
+  const combinedPrompts = filters.map(f => FILTER_PROMPTS[f] || FILTER_PROMPTS.default);
+  let prompt = `Enhance this photo with the following improvements:\n${combinedPrompts.join('\n')}`;
+  if (isPng) {
+    prompt += '\n\nCRITICAL: This is a PNG image with potential transparency. You MUST preserve any transparent areas exactly as they are. Do NOT add any background color to transparent regions. Keep the alpha channel intact.';
+  }
+  if (metaOpts) {
+    prompt += buildInlineMetadataInstruction(metaOpts.fileType, metaOpts.mode, metaOpts.customPrompt, metaOpts.fpMode);
+  }
+
+  const base64Match = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+  const mimeType = base64Match?.[1] || 'image/jpeg';
+  const rawBase64 = base64Match?.[2] || imageDataUrl.split(',').pop() || '';
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: rawBase64 } }] }],
+        generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    console.warn('[gemini-enhance-client] request failed', response.status, errText.slice(0, 200));
+    return null;
+  }
+
+  const data = await response.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find((p: { inlineData?: { data?: string; mimeType?: string } }) => p.inlineData?.data);
+  if (!imagePart?.inlineData) return null;
+  const imageUrl = `data:${imagePart.inlineData.mimeType || 'image/png'};base64,${imagePart.inlineData.data}`;
+
+  let metadata: MicrostockMetadata | undefined;
+  if (metaOpts) {
+    const textPart = parts.find((p: { text?: string }) => p.text)?.text || '';
+    const jsonMatch = textPart.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const sanitizedTitle = sanitizeTitle(String(parsed.title || ''), metaOpts.fpMode ? 99 : 200);
+        const sanitizedKeywords = sanitizeKeywords(String(parsed.keywords || ''), metaOpts.fpMode ? 48 : 49).join(', ');
+        metadata = {
+          filename: String(parsed.filename || `image.${metaOpts.fileType}`),
+          title: sanitizedTitle,
+          description: sanitizedTitle,
+          keywords: sanitizedKeywords,
+          adobeCategory: String(parsed.adobeCategory || 'Lifestyle'),
+          shutterstockCategory: String(parsed.shutterstockCategory || 'Miscellaneous'),
+          aiTrainingNote: typeof parsed.aiTrainingNote === 'string' ? parsed.aiTrainingNote.slice(0, 1000) : undefined,
+        };
+      } catch {
+        // Metadata parse failed — caller will fall back to a separate metadata call.
+      }
+    }
+  }
+
+  return { imageUrl, metadata };
+}
+
+export interface EnhanceResult {
+  enhancedDataUrl: string;
+  metadata?: MicrostockMetadata;
+}
+
 export async function enhanceImageWithAI(
   imageDataUrl: string,
   filters: FilterType[],
@@ -85,32 +206,61 @@ export async function enhanceImageWithAI(
   originalHeight: number,
   imageFormat: ImageFormat,
   customApiKeys?: string[],
-  upscale: UpscaleTarget = 'none'
-): Promise<string> {
+  upscale: UpscaleTarget = 'none',
+  metaOpts?: { fileType: FileType; mode: MetadataMode; customPrompt?: string; fpMode: boolean }
+): Promise<EnhanceResult> {
   // Calculate target dimensions
   const { targetWidth, targetHeight } = calculateMinimumDimensions(originalWidth, originalHeight, upscale);
   
   const isPng = imageFormat === 'png';
-  
-  const { data, error } = await supabase.functions.invoke('enhance-image', {
-    body: { 
-      imageBase64: imageDataUrl, 
-      filters,
-      customApiKeys,
-      preserveFormat: isPng // Tell edge function to preserve PNG format
+
+  let enhancedDataUrl: string | undefined;
+  let metadata: MicrostockMetadata | undefined;
+
+  // Try Gemini directly from the browser first — see tryGeminiEnhanceClientSide for why.
+  // This also asks for metadata JSON in the same call (see metaOpts), cutting
+  // the per-photo Gemini request count in half versus a separate call.
+  if (customApiKeys && customApiKeys.length > 0) {
+    for (const key of customApiKeys) {
+      try {
+        const result = await runGeminiThrottled(() =>
+          tryGeminiEnhanceClientSide(imageDataUrl, filters, isPng, key, metaOpts)
+        );
+        if (result) {
+          console.log('[imageEnhancer] Gemini (client-side) succeeded', { gotMetadata: !!result.metadata });
+          enhancedDataUrl = result.imageUrl;
+          metadata = result.metadata;
+          break;
+        }
+      } catch (e) {
+        console.warn('[gemini-enhance-client] key failed, trying next:', e);
+      }
     }
-  });
-
-  if (error) {
-    console.error('Edge function error:', error);
-    throw new Error(error.message || 'Failed to enhance image');
   }
 
-  if (data.error) {
-    throw new Error(data.error);
-  }
+  if (!enhancedDataUrl) {
+    console.log('[imageEnhancer] Client-side Gemini unavailable, falling back to edge function (Lovable)');
+    const { data, error } = await supabase.functions.invoke('enhance-image', {
+      body: { 
+        imageBase64: imageDataUrl, 
+        filters,
+        customApiKeys: undefined, // already tried client-side above; avoid a repeat failure from the same blocked server IP
+        preserveFormat: isPng // Tell edge function to preserve PNG format
+      }
+    });
 
-  let enhancedDataUrl = data.enhancedImage;
+    if (error) {
+      console.error('Edge function error:', error);
+      throw new Error(error.message || 'Failed to enhance image');
+    }
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    enhancedDataUrl = data.enhancedImage;
+    // No combined metadata from this fallback path — caller falls back to a separate metadata call.
+  }
   
   // If original was PNG but AI returned JPEG, convert back to PNG
   if (isPng && enhancedDataUrl && !enhancedDataUrl.startsWith('data:image/png')) {
@@ -129,7 +279,7 @@ export async function enhanceImageWithAI(
     enhancedDataUrl = embedExifIntoJpeg(enhancedDataUrl, completeRawExif);
   }
   
-  return enhancedDataUrl;
+  return { enhancedDataUrl, metadata };
 }
 
 // Convert JPEG data URL to PNG data URL
