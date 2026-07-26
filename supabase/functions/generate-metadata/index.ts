@@ -222,7 +222,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: isVectorPayload
-                ? "llama-3.3-70b-versatile"
+                ? "openai/gpt-oss-120b"
                 : "qwen/qwen3.6-27b",
               messages: [
                 { role: "system", content: systemPrompt },
@@ -236,8 +236,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
                       ]
                     }
               ],
-              max_tokens: 1500,
-              response_format: { type: "json_object" }
+              max_tokens: 1500
             }),
           });
         } else if (keyType === 'gemini') {
@@ -250,7 +249,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
           if (!isVectorPayload) {
             parts.push({ inline_data: { mime_type: mimeType, data: rawBase64 } });
           }
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -263,7 +262,7 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "gpt-4o-mini",
+              model: "claude-opus-4-6",
               messages: [
                 { role: "system", content: systemPrompt },
                 isVectorPayload
