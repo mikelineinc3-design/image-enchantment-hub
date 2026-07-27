@@ -1,7 +1,7 @@
 import { FileType, MicrostockMetadata, MetadataMode } from '@/types/photo';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeTitle, sanitizeKeywords } from './iptcXmpWriter';
-import { runGeminiThrottled } from './geminiRateLimiter';
+import { runGeminiThrottled, pickGeminiKeyRoundRobin } from './geminiRateLimiter';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
@@ -208,10 +208,10 @@ export async function generateMicrostockMetadata(
 
   // Try Gemini directly from the browser first — see tryGeminiClientSide for why.
   if (geminiApiKeys && geminiApiKeys.length > 0) {
-    for (const key of geminiApiKeys) {
+    for (const key of pickGeminiKeyRoundRobin(geminiApiKeys)) {
       try {
         const result = await runGeminiThrottled(() =>
-          tryGeminiClientSide(visionPayload, fileType, mode, customPrompt, fpMode, key)
+          tryGeminiClientSide(visionPayload, fileType, mode, customPrompt, fpMode, key), key
         );
         if (result) {
           console.log('[metadataGenerator] Gemini (client-side) succeeded');
