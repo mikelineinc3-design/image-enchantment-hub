@@ -6,7 +6,8 @@ import { embedXmpIntoJpeg, sanitizeTitle, sanitizeKeywords, IptcXmpData } from '
 import { embedMetadataIntoPng } from './pngMetadataWriter';
 import { embedMetadataIntoEpsDataUrl } from './epsMetadataWriter';
 import { embedMetadataIntoSvgDataUrl } from './svgMetadataWriter';
-import { runGeminiThrottled } from './geminiRateLimiter';
+import { runGeminiThrottled, pickGeminiKeyRoundRobin } from './geminiRateLimiter';
+import { createVisionPreview } from './metadataGenerator';
 
 // Maximum dimensions to prevent memory issues
 const MAX_DIMENSION = 4000;
@@ -218,13 +219,25 @@ export async function enhanceImageWithAI(
   let metadata: MicrostockMetadata | undefined;
 
   // Try Gemini directly from the browser first — see tryGeminiEnhanceClientSide for why.
-  // This also asks for metadata JSON in the same call (see metaOpts), cutting
-  // the per-photo Gemini request count in half versus a separate call.
+  // Downscale the INPUT sent to Gemini: the result gets resized to the target
+  // dimensions locally afterward regardless, so sending a huge original (e.g.
+  // 90MP+) just burns tokens and time for no quality benefit. 2048px keeps
+  // enhancement quality solid while cutting payload size dramatically for
+  // oversized originals.
+  let aiInputDataUrl = imageDataUrl;
+  if (!isPng) {
+    try {
+      aiInputDataUrl = await createVisionPreview(imageDataUrl, 2048, 0.92);
+    } catch (e) {
+      console.warn('[imageEnhancer] downscale-for-AI failed, sending original size:', e);
+    }
+  }
+
   if (customApiKeys && customApiKeys.length > 0) {
-    for (const key of customApiKeys) {
+    for (const key of pickGeminiKeyRoundRobin(customApiKeys)) {
       try {
         const result = await runGeminiThrottled(() =>
-          tryGeminiEnhanceClientSide(imageDataUrl, filters, isPng, key, metaOpts)
+          tryGeminiEnhanceClientSide(aiInputDataUrl, filters, isPng, key, metaOpts), key
         );
         if (result) {
           console.log('[imageEnhancer] Gemini (client-side) succeeded', { gotMetadata: !!result.metadata });
