@@ -16,12 +16,14 @@ interface BatchActionsProps {
   metadataMode: MetadataMode;
   customPrompt: string;
   fpMode: boolean;
+  generateMetadataEnabled: boolean;
   onFilterChange: (filters: FilterType[]) => void;
   onFileTypeChange: (fileType: FileType) => void;
   onUpscaleTargetChange: (target: UpscaleTarget) => void;
   onMetadataModeChange: (mode: MetadataMode) => void;
   onCustomPromptChange: (prompt: string) => void;
   onFpModeChange: (enabled: boolean) => void;
+  onGenerateMetadataChange: (enabled: boolean) => void;
   onEnhanceAll: () => void;
   onDownloadAll: () => void;
   onDownloadCSV: () => void;
@@ -37,12 +39,14 @@ export function BatchActions({
   metadataMode,
   customPrompt,
   fpMode,
+  generateMetadataEnabled,
   onFilterChange,
   onFileTypeChange,
   onUpscaleTargetChange,
   onMetadataModeChange,
   onCustomPromptChange,
   onFpModeChange,
+  onGenerateMetadataChange,
   onEnhanceAll,
   onDownloadAll,
   onDownloadCSV,
@@ -117,6 +121,25 @@ export function BatchActions({
               </Button>
               <Label className="text-xs text-muted-foreground ml-1">
                 {fpMode ? 'JPG ≥ 2MB' : 'Off'}
+              </Label>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Generate Metadata:</span>
+            <div className="flex items-center gap-2 h-9">
+              <Button
+                type="button"
+                size="sm"
+                variant={generateMetadataEnabled ? 'default' : 'outline'}
+                disabled={isEnhancing}
+                onClick={() => onGenerateMetadataChange(!generateMetadataEnabled)}
+                className={cn(generateMetadataEnabled && 'gradient-primary text-primary-foreground')}
+              >
+                <FileText className="w-4 h-4" />
+                {generateMetadataEnabled ? 'On' : 'Off'}
+              </Button>
+              <Label className="text-xs text-muted-foreground ml-1">
+                {generateMetadataEnabled ? 'Title + keywords' : 'Upscale/enhance only'}
               </Label>
             </div>
           </div>
