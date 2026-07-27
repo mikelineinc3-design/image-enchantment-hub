@@ -36,6 +36,7 @@ const Index = () => {
   const [metadataMode, setMetadataMode] = useState<MetadataMode>('default');
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [fpMode, setFpMode] = useState<boolean>(false);
+  const [generateMetadataEnabled, setGenerateMetadataEnabled] = useState<boolean>(true);
   const processingRef = useRef<boolean>(false);
   
   const { getKeys, getAllKeys, addKey, removeKey } = useApiKeys();
@@ -226,6 +227,21 @@ const Index = () => {
     // from the filename (text-only) and embed it into the file bytes.
     if (photo.imageFormat === 'eps' || photo.imageFormat === 'svg') {
       const vectorKind = photo.imageFormat.toUpperCase();
+
+      if (!generateMetadataEnabled) {
+        // Nothing to do for vector files with metadata off — there's no pixel
+        // enhancement possible for EPS/SVG, so just pass the file through as-is.
+        setPhotos(prev => prev.map(p =>
+          p.id === id ? { ...p, enhancedPreview: sourceDataUrl, status: 'ready' } : p
+        ));
+        setEnhancingIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        return true;
+      }
+
       try {
         setPhotos(prev => prev.map(p =>
           p.id === id ? { ...p, status: 'generating-metadata' } : p
@@ -319,7 +335,7 @@ const Index = () => {
             photo.imageFormat,
             allKeys.gemini.length > 0 ? allKeys.gemini : undefined,
             upscaleTarget,
-            { fileType: photo.fileType, mode: metadataMode, customPrompt, fpMode }
+            generateMetadataEnabled ? { fileType: photo.fileType, mode: metadataMode, customPrompt, fpMode } : undefined
           );
           enhancedDataUrl = result.enhancedDataUrl;
           inlineMetadata = result.metadata;
@@ -376,9 +392,15 @@ const Index = () => {
       // Update with enhanced image
       setPhotos(prev => prev.map(p =>
         p.id === id
-          ? { ...p, enhancedPreview: enhancedDataUrl, imageFormat: outputFormat, fileType: outputFormat === 'jpeg' && p.fileType === 'png' ? 'jpg' : p.fileType, status: 'generating-metadata' }
+          ? { ...p, enhancedPreview: enhancedDataUrl, imageFormat: outputFormat, fileType: outputFormat === 'jpeg' && p.fileType === 'png' ? 'jpg' : p.fileType, status: generateMetadataEnabled ? 'generating-metadata' : 'ready' }
           : p
       ));
+
+      if (!generateMetadataEnabled) {
+        // Metadata generation is turned off — this photo is done after
+        // enhancement/upscale, no AI text call is made at all.
+        return true;
+      }
       
       // Generate metadata with OpenAI keys if available (with retry)
       // Validate the data URL first to prevent sending invalid data to edge function
@@ -450,7 +472,7 @@ const Index = () => {
         return next;
       });
     }
-  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt, fpMode]);
+  }, [photos, getAllKeys, upscaleTarget, metadataMode, customPrompt, fpMode, generateMetadataEnabled]);
 
   const handleEnhanceAll = useCallback(async () => {
     if (processingRef.current) {
@@ -601,12 +623,14 @@ const Index = () => {
           metadataMode={metadataMode}
           customPrompt={customPrompt}
           fpMode={fpMode}
+          generateMetadataEnabled={generateMetadataEnabled}
           onFilterChange={handleBatchFilterChange}
           onFileTypeChange={handleBatchFileTypeChange}
           onUpscaleTargetChange={setUpscaleTarget}
           onMetadataModeChange={setMetadataMode}
           onCustomPromptChange={setCustomPrompt}
           onFpModeChange={setFpMode}
+          onGenerateMetadataChange={setGenerateMetadataEnabled}
           onEnhanceAll={handleEnhanceAll}
           onDownloadAll={handleDownloadAll}
           onDownloadCSV={() => downloadCSV(photos.filter(p => p.status === 'ready' && p.metadata))}
