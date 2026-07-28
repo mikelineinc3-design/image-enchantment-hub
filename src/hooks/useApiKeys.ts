@@ -22,7 +22,7 @@ export interface ApiKeyConfig {
 }
 
 const PROVIDER_LIMITS: Record<ApiProvider, number> = {
-  gemini: 5,
+  gemini: 50,
   openai: 3,
   groq: 3,
   cloudconvert: 10,
