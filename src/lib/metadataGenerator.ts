@@ -5,6 +5,7 @@ import { runGeminiThrottled, pickGeminiKeyRoundRobin } from './geminiRateLimiter
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
+let clientSideRotation = 0;
 
 const NON_RETRYABLE_ERROR_CODES = new Set(['payment_required', 'invalid_api_key']);
 
@@ -123,6 +124,78 @@ Return ONLY this JSON object:
   return { systemPrompt: prompt, userText, isVector };
 }
 
+async function tryAgentRouterClientSide(
+  visionPayload: string,
+  fileType: FileType,
+  mode: MetadataMode,
+  customPrompt: string | undefined,
+  fpMode: boolean,
+  apiKey: string
+): Promise<MicrostockMetadata | null> {
+  const { systemPrompt, userText, isVector } = buildMetadataPrompt(fileType, mode, customPrompt, fpMode);
+
+  const response = await fetch('https://agentrouter.org/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-6',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        isVector
+          ? { role: 'user', content: userText }
+          : {
+              role: 'user',
+              content: [
+                { type: 'text', text: userText },
+                { type: 'image_url', image_url: { url: visionPayload } }
+              ]
+            }
+      ],
+      max_tokens: 1000
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    console.warn('[agentrouter-client] request failed', response.status, errText.slice(0, 200));
+    return null;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    console.warn('[agentrouter-client] non-JSON response, content-type:', contentType);
+    return null;
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) return null;
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  let metadata: Record<string, unknown>;
+  try {
+    metadata = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+
+  const sanitizedTitle = sanitizeTitle(String(metadata.title || ''), fpMode ? 99 : 200);
+  const sanitizedKeywords = sanitizeKeywords(String(metadata.keywords || ''), fpMode ? 48 : 49).join(', ');
+  return {
+    filename: String(metadata.filename || `image.${fileType}`),
+    title: sanitizedTitle,
+    description: sanitizedTitle,
+    keywords: sanitizedKeywords,
+    adobeCategory: String(metadata.adobeCategory || 'Lifestyle'),
+    shutterstockCategory: String(metadata.shutterstockCategory || 'Miscellaneous'),
+    aiTrainingNote: typeof metadata.aiTrainingNote === 'string' ? metadata.aiTrainingNote.slice(0, 1000) : undefined,
+  };
+}
+
 async function tryGeminiClientSide(
   visionPayload: string,
   fileType: FileType,
@@ -206,9 +279,18 @@ export async function generateMicrostockMetadata(
     ? await createVisionPreview(imageDataUrl)
     : imageDataUrl;
 
-  // Try Gemini directly from the browser first — see tryGeminiClientSide for why.
-  if (geminiApiKeys && geminiApiKeys.length > 0) {
-    for (const key of pickGeminiKeyRoundRobin(geminiApiKeys)) {
+  // Rotate which client-side provider gets tried FIRST (Gemini vs AgentRouter)
+  // so AgentRouter's paid capacity actually gets used instead of sitting idle
+  // behind Gemini every single time. Both are vision-capable and can generate
+  // metadata equally well — only image ENHANCEMENT is Gemini-exclusive.
+  const hasGemini = geminiApiKeys && geminiApiKeys.length > 0;
+  const hasAgentRouter = agentrouterApiKeys && agentrouterApiKeys.length > 0;
+  clientSideRotation++;
+  const preferAgentRouterFirst = hasAgentRouter && (!hasGemini || clientSideRotation % 2 === 0);
+
+  const tryGeminiPool = async (): Promise<MicrostockMetadata | null> => {
+    if (!hasGemini) return null;
+    for (const key of pickGeminiKeyRoundRobin(geminiApiKeys!)) {
       try {
         const result = await runGeminiThrottled(() =>
           tryGeminiClientSide(visionPayload, fileType, mode, customPrompt, fpMode, key), key
@@ -221,7 +303,35 @@ export async function generateMicrostockMetadata(
         console.warn('[gemini-client] key failed, trying next:', e);
       }
     }
-    console.log('[metadataGenerator] All client-side Gemini keys failed, falling back to edge function providers');
+    return null;
+  };
+
+  const tryAgentRouterPool = async (): Promise<MicrostockMetadata | null> => {
+    if (!hasAgentRouter) return null;
+    for (const key of agentrouterApiKeys!) {
+      try {
+        const result = await tryAgentRouterClientSide(visionPayload, fileType, mode, customPrompt, fpMode, key);
+        if (result) {
+          console.log('[metadataGenerator] AgentRouter (client-side) succeeded');
+          return result;
+        }
+      } catch (e) {
+        console.warn('[agentrouter-client] key failed, trying next:', e);
+      }
+    }
+    return null;
+  };
+
+  const clientSidePools = preferAgentRouterFirst
+    ? [tryAgentRouterPool, tryGeminiPool]
+    : [tryGeminiPool, tryAgentRouterPool];
+
+  for (const pool of clientSidePools) {
+    const result = await pool();
+    if (result) return result;
+  }
+  if (hasGemini || hasAgentRouter) {
+    console.log('[metadataGenerator] All client-side providers failed, falling back to edge function providers');
   }
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
