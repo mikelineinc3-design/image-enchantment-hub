@@ -531,13 +531,18 @@ Also include an "aiTrainingNote" field (<= 500 chars) describing what AI models 
 
     // All keys failed
     const userFailures = failures.filter((f) => f.provider !== 'lovable');
+    const lovableFailure = failures.find((f) => f.provider === 'lovable');
 
-    for (const failure of userFailures) {
+    for (const failure of failures) {
       console.error(`All API keys failed: ${failure.provider}: ${failure.message} (code: ${failure.code})`);
     }
 
-    const combinedMessage = userFailures.length > 0
-      ? userFailures.map((f) => `${f.provider.toUpperCase()}: ${f.message} (code: ${f.code})`).join('\n')
+    // Show every real failure. Only fall back to the generic message if
+    // somehow nothing was even attempted (shouldn't happen since Lovable is
+    // always in the pool as a last resort).
+    const relevantFailures = userFailures.length > 0 ? userFailures : (lovableFailure ? [lovableFailure] : []);
+    const combinedMessage = relevantFailures.length > 0
+      ? relevantFailures.map((f) => `${f.provider.toUpperCase()}: ${f.message} (code: ${f.code})`).join('\n')
       : 'Metadata service unavailable. Please try again.';
 
     return new Response(JSON.stringify({
