@@ -17,7 +17,7 @@ interface ApiKeyManagerProps {
 }
 
 const PROVIDER_META: Record<ApiProvider, { label: string; limit: number; color: string; help: { href: string; label: string } }> = {
-  gemini: { label: 'Gemini', limit: 5, color: 'text-primary', help: { href: 'https://aistudio.google.com/app/apikey', label: 'Google AI Studio' } },
+  gemini: { label: 'Gemini', limit: 50, color: 'text-primary', help: { href: 'https://aistudio.google.com/app/apikey', label: 'Google AI Studio' } },
   openai: { label: 'OpenAI', limit: 3, color: 'text-green-500', help: { href: 'https://platform.openai.com/api-keys', label: 'OpenAI Platform' } },
   groq: { label: 'Groq', limit: 3, color: 'text-orange-500', help: { href: 'https://console.groq.com/keys', label: 'Groq Console' } },
   cloudconvert: { label: 'CloudConvert', limit: 10, color: 'text-blue-500', help: { href: 'https://cloudconvert.com/dashboard/api/v2/keys', label: 'CloudConvert Dashboard' } },
